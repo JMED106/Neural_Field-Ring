@@ -13,7 +13,7 @@ __author__ = 'Jose M. Esnaola Acebes'
 
 # Function that performs the integration (prepared for numba)
 @numba.autojit
-def qifint(v_exit_s1, v, exit0, eta_0, s_0, noise0, tiempo, number, dn, dt, tau, vpeak, refr_tau, tau_peak):
+def qifint(v_exit_s1, v, exit0, eta_0, s_0, tiempo, number, dn, dt, tau, vpeak, refr_tau, tau_peak):
     """ This function checks (for each neuron) whether the neuron is in the
     refractory period, and computes the integration in case is NOT. If it is,
     then it adds a time step until the refractory period finishes.
@@ -30,8 +30,7 @@ def qifint(v_exit_s1, v, exit0, eta_0, s_0, noise0, tiempo, number, dn, dt, tau,
     for n in xrange(number):
         d[n, 2] = 0
         if t >= exit0[n]:
-            d[n, 0] = v[n] + (dt / tau) * (v[n] * v[n] + eta_0[n] + tau * s_0[int(n / dn)]) + noise0[
-                int(n / dn)]  # Euler integration
+            d[n, 0] = v[n] + (dt / tau) * (v[n] * v[n] + eta_0[n] + tau * s_0[int(n / dn)])  # Euler integration
             if d[n, 0] >= vpeak:
                 d[n, 1] = t + refr_tau - (tau_peak - 1.0 / d[n, 0])
                 d[n, 2] = 1

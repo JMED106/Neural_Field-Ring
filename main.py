@@ -7,7 +7,7 @@ import numpy as np
 import progressbar as pb
 
 from nflib import Data, Connectivity, FiringRate
-from tools import Perturbation
+from tools import Perturbation, qifint
 
 __author__ = 'jm'
 
@@ -110,32 +110,30 @@ while temps < d.tfinal:
                 np.dot(np.array([(se + si + p.input)]).T, d.auxni).flatten()[em_i]) + noiseinput[em_e]
         else:
             # Excitatory
-            d.matrixE[em_e, 0] += (d.dt / d.tau) * (
-                d.matrixE[em_e, 0] * d.matrixE[em_e, 0] + d.etaE[em_e] + d.tau *
-                np.dot(np.array([(se + si + p.input)]).T, d.auxne).flatten()[em_e])
+            d.matrixE = qifint(d.matrixE, d.matrixE[:, 0], d.matrixE[:, 1], d.eta0, se + si + p.input, temps, d.Ne,
+                               d.dNe, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
             # Inhibitory
-            d.matrixI[em_i, 0] += (d.dt / d.tau) * (
-                d.matrixI[em_i, 0] * d.matrixI[em_i, 0] + d.etaI[em_i] + d.tau *
-                np.dot(np.array([(se + si + p.input)]).T, d.auxni).flatten()[em_i])
+            d.matrixI = qifint(d.matrixI, d.matrixI[:, 0], d.matrixI[:, 1], d.eta0, se + si + p.input, temps, d.Ni,
+                               d.dNi, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
 
         # Excitatory
-        spm_e = (d.matrixE[:, 1] <= temps) & (d.matrixE[:, 0] >= d.vpeak)
-        # d.matrixE[spm_e, 1] = temps + 2.0 * d.tau / d.matrixE[spm_e, 0]
-        d.matrixE[spm_e, 1] = temps + d.refr_tau - (d.tau_peak - 1.0 / d.matrixE[spm_e, 0])
-        d.matrixE[spm_e, 2] = 1
-        d.matrixE[~spm_e, 2] = 0
-        d.matrixE[spm_e, 0] = -d.matrixE[spm_e, 0]
+        # spm_e = (d.matrixE[:, 1] <= temps) & (d.matrixE[:, 0] >= d.vpeak)
+        # # d.matrixE[spm_e, 1] = temps + 2.0 * d.tau / d.matrixE[spm_e, 0]
+        # d.matrixE[spm_e, 1] = temps + d.refr_tau - (d.tau_peak - 1.0 / d.matrixE[spm_e, 0])
+        # d.matrixE[spm_e, 2] = 1
+        # d.matrixE[~spm_e, 2] = 0
+        # d.matrixE[spm_e, 0] = -d.matrixE[spm_e, 0]
         # #############################
         d.spikes_e_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixE[:, 2]  # We store the spikes
         d.spikes_e[:, tstep % d.T_syn] = 1 * d.spikes_e_mod[:, tstep % d.spiketime]
 
         # Inhibitory
-        spm_i = (d.matrixI[:, 1] <= temps) & (d.matrixI[:, 0] >= d.vpeak)
-        # d.matrixI[spm_i, 1] = temps + 2.0 * d.tau / d.matrixI[spm_i, 0]
-        d.matrixE[spm_i, 1] = temps + d.refr_tau - (d.tau_peak - 1.0 / d.matrixE[spm_i, 0])
-        d.matrixI[spm_i, 2] = 1
-        d.matrixI[~spm_i, 2] = 0
-        d.matrixI[spm_i, 0] = -d.matrixI[spm_i, 0]
+        # spm_i = (d.matrixI[:, 1] <= temps) & (d.matrixI[:, 0] >= d.vpeak)
+        # # d.matrixI[spm_i, 1] = temps + 2.0 * d.tau / d.matrixI[spm_i, 0]
+        # d.matrixE[spm_i, 1] = temps + d.refr_tau - (d.tau_peak - 1.0 / d.matrixE[spm_i, 0])
+        # d.matrixI[spm_i, 2] = 1
+        # d.matrixI[~spm_i, 2] = 0
+        # d.matrixI[spm_i, 0] = -d.matrixI[spm_i, 0]
         # #############################
         d.spikes_i_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixI[:, 2]  # We store the spikes
         d.spikes_i[:, tstep % d.T_syn] = 1 * d.spikes_i_mod[:, tstep % d.spiketime]
