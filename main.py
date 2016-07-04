@@ -29,7 +29,7 @@ def main(argv, pmode=1, ampl=1.0):
 
     for opt, arg in opts:
         if opt == '-h':
-            print 'connectivity.py -m <mode> -a <amplitude>'
+            print 'main.py -m <mode> -a <amplitude>'
             sys.exit()
         elif opt in ("-m", "--mode"):
             pmode = float(arg)
@@ -107,8 +107,6 @@ tpert = 0.0
 tpertstep = 0
 END = False
 PERT = False
-a = None
-b = None
 
 # Time loop
 # while END is False:
