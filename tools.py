@@ -37,7 +37,7 @@ class Perturbation:
         # Rise variables (attack) and parameters
         self.attack = attack
         self.taur = 0.2
-        self.trmod = 0.0
+        self.trmod = 0.1
         # Decay (release) and parameters
         self.release = release
         self.taud = 0.2
@@ -48,8 +48,8 @@ class Perturbation:
         self.ptype = ptype
         self.amp = amplitude
         # Spatial modulation (wavelengths)
-        self.smod = self.sptprofile(modes, self.amp)
         self.phi = np.linspace(-np.pi, np.pi, self.d.l)
+        self.smod = self.sptprofile(modes, self.amp)
 
     def sptprofile(self, modes, amp=1E-2):
         """ Gives the spatial profile of the perturbation: different wavelength and combinations
@@ -70,7 +70,7 @@ class Perturbation:
             # Release time, after tf
             if temps >= self.tf:
                 if self.release == 'exponential' and self.tdmod > self.mintd:
-                    self.tdmod += (self.d.dt / self.taud) * self.tdmod
+                    self.tdmod -= (self.d.dt / self.taud) * self.tdmod
                     self.input = self.tdmod * self.smod
                 elif self.release == 'instantaneous':
                     self.input = 0.0

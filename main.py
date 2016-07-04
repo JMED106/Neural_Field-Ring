@@ -4,6 +4,8 @@ from timeit import default_timer as timer
 import numpy as np
 
 from nflib import Data, Connectivity, FiringRate
+from tools import Perturbation
+
 # from scipy.signal import argrelextrema
 # from scipy.fftpack import dct
 # import matplotlib.pyplot as plt
@@ -20,75 +22,48 @@ def noise(length=100, disttype='g'):
         return np.random.randn(length)
 
 
-def main(argv, pmode=1, ampl=1.0):
+def main(argv, pmode=1, ampl=1.0, system='nf'):
     try:
-        opts, args = getopt.getopt(argv, "hm:a:", ["mode=", "amp="])
+        opts, args = getopt.getopt(argv, "hm:a:s:", ["mode=", "amp=", "system="])
     except getopt.GetoptError:
-        print 'main.py -m <mode> -a <amplitude>'
+        print 'main.py -m <mode> -a <amplitude> -s <system>'
         sys.exit(2)
 
     for opt, arg in opts:
         if opt == '-h':
-            print 'main.py -m <mode> -a <amplitude>'
+            print 'main.py -m <mode> -a <amplitude> -s <system>'
             sys.exit()
         elif opt in ("-m", "--mode"):
-            pmode = float(arg)
+            pmode = int(arg)
         elif opt in ("-a", "--amp"):
             ampl = float(arg)
-    return pmode, ampl
+        elif opt in ("-s", "--system"):
+            system = arg
+    return pmode, ampl, system
 
 
 selmode = 0
 selamp = 1.0
+selsystem = 'nf'
 if __name__ == "__main__":
-    selmode, selamp = main(sys.argv[1:])
+    selmode, selamp, selsystem = main(sys.argv[1:])
 
 ############################################################################
 #############################
 # 0) PREPARE FOR CALCULATIONS
 
 # 0.1) Load data object:
-d = Data(l=100, N=int(1E5), eta0=2.0, delta=1.0, tfinal=20.0, system='both')
+d = Data(l=100, N=int(2E4), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
 # 0.2) Create connectivity matrix and extract eigenmodes
-c = Connectivity(d.l, profile='mex-hat', amplitude=2.0, data=d)
+c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d)
+print "Modes: ", c.modes
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
 # 0.4) Load Firing rate class in case qif network is simulated
 if d.system != 'nf':
     fr = FiringRate(data=d)
-
-print "Modes: ", c.modes
-
-# # 0.9) Perturbation parameters
-pert_modes = [[int(selmode), float(selamp), None]]
-pert = 0.0
-phi = np.linspace(-np.pi, np.pi, d.l)
-phip = np.linspace(-np.pi, np.pi, d.l + 1)
-
-r0p = 0.0
-
-for mode in pert_modes:
-    if mode[0] == 0:
-        pert = mode[1]
-    else:
-        pert += mode[1] * np.cos(mode[0] * phi)
-
-pert_modes = np.array(pert_modes)
-
-amplitude = 1.0
-Input = 0.0 * pert
-It = np.zeros((d.nsteps, d.l))
-It[0, :] = Input
-
-pert_duration = 0.5
-pert_tsteps = int(pert_duration / d.dt)
-rise = 0.2
-# Registered times
-pert_time = 1.0
-tpert_0 = None
-tpert_f = None
-tmeasure = None
-#
+# 0.5) Set perturbation configuration
+p = Perturbation(data=d, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
 
 # Progress-bar configuration
 widgets = ['Progress: ', pb.Percentage(), ' ',
@@ -112,17 +87,10 @@ PERT = False
 # while END is False:
 while temps < d.tfinal:
     # ######################## - PERTURBATION  - ##
-    if PERT and not d.new_ic:
-        Input = pert_time * selamp * np.exp((tpert - pert_time) / rise)
-        tpert += d.dt
-        tpertstep += 1
-        tpert_f = tstep
-    else:
-        tpert = 0.0
-        tpertstep = 0
-        Input = 0.0
-
-    It[tstep % d.nsteps, :] = Input
+    if p.pbool and not d.new_ic:
+        if temps >= p.t0:
+            p.timeevo(temps)
+    p.it[tstep % d.nsteps, :] = p.input
 
     # ######################## -  INTEGRATION  - ##
     # ######################## -      qif      - ##
@@ -140,20 +108,20 @@ while temps < d.tfinal:
             # Excitatory
             d.matrixE[em_e, 0] += (d.dt / d.tau) * (
                 d.matrixE[em_e, 0] * d.matrixE[em_e, 0] + d.eta0 + d.tau *
-                np.dot(np.array([(se + si)]).T, d.auxne).flatten()[em_e]) + noiseinput[em_e]
+                np.dot(np.array([(se + si + p.input)]).T, d.auxne).flatten()[em_e]) + noiseinput[em_e]
             # Inhibitory
             d.matrixI[em_i, 0] += (d.dt / d.tau) * (
                 d.matrixI[em_e, 0] * d.matrixI[em_e, 0] + d.eta0 + d.tau *
-                np.dot(np.array([(se + si)]).T, d.auxni).flatten()[em_i]) + noiseinput[em_e]
+                np.dot(np.array([(se + si + p.input)]).T, d.auxni).flatten()[em_i]) + noiseinput[em_e]
         else:
             # Excitatory
             d.matrixE[em_e, 0] += (d.dt / d.tau) * (
                 d.matrixE[em_e, 0] * d.matrixE[em_e, 0] + d.etaE[em_e] + d.tau *
-                np.dot(np.array([(se + si)]).T, d.auxne).flatten()[em_e])
+                np.dot(np.array([(se + si + p.input)]).T, d.auxne).flatten()[em_e])
             # Inhibitory
             d.matrixI[em_i, 0] += (d.dt / d.tau) * (
                 d.matrixI[em_i, 0] * d.matrixI[em_i, 0] + d.etaI[em_i] + d.tau *
-                np.dot(np.array([(se + si)]).T, d.auxni).flatten()[em_i])
+                np.dot(np.array([(se + si + p.input)]).T, d.auxni).flatten()[em_i])
 
         # Excitatory
         spm_e = (d.matrixE[:, 1] <= temps) & (d.matrixE[:, 0] >= d.vpeak)
@@ -199,32 +167,24 @@ while temps < d.tfinal:
             d.eta0 + d.sphi[tstep % d.nsteps] -
             np.pi * np.pi * d.rphi[(tstep + d.nsteps - 1) % d.nsteps] * d.rphi[
                 (tstep + d.nsteps - 1) % d.nsteps] +
-            Input)
+            p.input)
 
     # TODO Perturbation at certain time
-    if int(pert_time / d.dt) <= tstep <= int((pert_time + pert_time) / d.dt):
-        if tpert_0 is None:
-            tpert_0 = tstep
-        PERT = True
-    else:
-        PERT = False
-    # We detect the maximum fr produced by the perturbation
-    if tstep >= int((pert_time + pert_time) / d.dt) and tmeasure is None:
-        if d.rphi[tstep % d.nsteps, d.l / 2] <= d.rphi[(tstep + d.nsteps - 1) % d.nsteps, d.l / 2]:
-            tmeasure = tstep
-            r0p = d.rphi[tstep % d.nsteps, d.l / 2] - r0p
+    if int(p.t0 / d.dt) == tstep:
+        p.pbool = True
 
     # Time evolution
     pbar.update(10 * tstep + 1)
     temps += d.dt
     tstep += 1
 
+# Finish pbar
+pbar.finish()
 # Save initial conditions
 if d.new_ic:
     d.save_ic(temps)
 
 # TODO: save firing rate time series (in the FiringRate class)
-# TODO: perturbation function (where??)
 
 # Stop the timer
 time2 = timer()
@@ -234,6 +194,7 @@ gp = Gnuplot.Gnuplot(persist=1)
 p1 = Gnuplot.PlotItems.Data(np.c_[d.tpoints * d.faketau, d.rphi[:, d.l / 2] / d.faketau], with_='lines')
 p2 = Gnuplot.PlotItems.Data(np.c_[np.array(fr.tempsfr) * d.faketau, np.array(fr.r)[:, d.l / 2] / d.faketau],
                             with_='lines')
+# p2 = Gnuplot.PlotItems.Data(np.c_[d.tpoints * d.faketau, p.it[:, d.l / 2] + d.r0 / d.faketau], with_='lines')
 gp.plot(p1, p2)
 
 print 'Total time: {}.'.format(Ttime)

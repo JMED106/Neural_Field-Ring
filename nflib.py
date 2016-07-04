@@ -239,9 +239,9 @@ class Data:
                     self.fileprm2 = '%s_%.2lf-%.2lf-%.2lf-%d' % (self.fp, j02, eta, delta, self.l)
                     try:
                         self.spikes_e = np.load("%sic_qif_spikes_e_%s-%d.npy" % (self.filepath, self.fileprm2, Ne))
-                        self.spikes_i = np.load("%sic_qif_spikes_i_%s-%d.npy" % (self.filepath, self.fileprm, Ni))
-                        self.matrixE = np.load("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm, Ne))
-                        self.matrixI = np.load("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm, Ni))
+                        self.spikes_i = np.load("%sic_qif_spikes_i_%s-%d.npy" % (self.filepath, self.fileprm2, Ni))
+                        self.matrixE = np.load("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm2, Ne))
+                        self.matrixI = np.load("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm2, Ni))
                         print "Successfully loaded all data matrices."
                     except IOError:
                         print "Files do not exist or cannot be read. This behavior wasn't expected ..."
@@ -414,7 +414,7 @@ class Connectivity:
         if coords is None:
             if length is None:
                 length = 500
-            theta = (2.0 * np.pi / length) * np.arange(length) - np.pi
+            theta = (2.0 * np.pi / length) * np.arange(length)
         else:
             theta = 1.0 * coords
         return je / special.i0(me) * np.exp(me * np.cos(theta)) - ji / special.i0(mi) * np.exp(mi * np.cos(theta))
