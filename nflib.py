@@ -465,7 +465,7 @@ class Connectivity:
         return sol
 
     def linresponse(self):
-        # TODO Linear Response
+        # TODO Linear Response (may be is better to do this in the perturbation class)
         pass
 
 
@@ -536,7 +536,6 @@ class FiringRate:
         if (tstep + 1) % self.sampling == 0 and (tstep * self.d.dt >= self.swindow):
             self.tfrstep += 1
             self.temps = tstep * self.d.dt
-            # TODO (define the vectors np.ones outside)
             re = (1.0 / self.swindow) * (1.0 / self.d.dNe) * np.dot(self.auxMatE,
                                                                     np.dot(self.frspikes_e, self.wones))
             ri = (1.0 / self.swindow) * (1.0 / self.d.dNi) * np.dot(self.auxMatI,
@@ -552,7 +551,7 @@ class FiringRate:
             # self.r2[tstep % self.d.nsteps] = 1.0 * self.r[self.rsum_count]
             # Average of the voltages over a time window and over the populations
             # vsample = np.ma.masked_where(np.abs(v) >= vpeak, v).mean(axis=0).data
-            # This 1/dN is wrong (TODO)
+            # This 1/dN is wrong ()
             # vavg[rsum_count] = (1.0/dN)*np.dot(auxMat, vsample)
             self.ravg += 1
 

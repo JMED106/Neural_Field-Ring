@@ -98,7 +98,6 @@ while temps < d.tfinal:
         em_i = (d.matrixI[:, 1] <= temps)  # Inhibitory
 
         if d.fp == 'noise':
-            # TODO (define the vectors np.ones outside)
             noiseinput = np.sqrt(2.0 * d.dt / d.tau * d.delta) * noise(d.N)
             # Excitatory
             d.matrixE[em_e, 0] += (d.dt / d.tau) * (
@@ -162,7 +161,7 @@ while temps < d.tfinal:
                 (tstep + d.nsteps - 1) % d.nsteps] +
             p.input)
 
-    # TODO Perturbation at certain time
+    # Perturbation at certain time
     if int(p.t0 / d.dt) == tstep:
         p.pbool = True
 

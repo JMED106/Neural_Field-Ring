@@ -25,7 +25,7 @@ def qifint(v_exit_s1, v, exit0, eta_0, s_0, tiempo, number, dn, dt, tau, vpeak, 
     """
 
     d = 1 * v_exit_s1
-    # These steps are necessary in order to use Numba (don't ask why ...)
+    # These steps are necessary in order to use Numba
     t = tiempo * 1.0
     for n in xrange(number):
         d[n, 2] = 0
