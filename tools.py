@@ -1,3 +1,4 @@
+import numba
 import numpy as np
 
 from nflib import Data
@@ -8,6 +9,34 @@ __author__ = 'Jose M. Esnaola Acebes'
 
     + Perturbation class
 """
+
+
+# Function that performs the integration (prepared for numba)
+@numba.autojit
+def qifint(v_exit_s1, v, exit0, eta_0, s_0, noise0, tiempo, number, dn, dt, tau, vpeak, refr_tau, tau_peak):
+    """ This function checks (for each neuron) whether the neuron is in the
+    refractory period, and computes the integration in case is NOT. If it is,
+    then it adds a time step until the refractory period finishes.
+
+    The spike is computed when the neuron in the refractory period, i.e.
+    a neuron that has already crossed the threshold, reaches the midpoint
+    in the refractory period, t_peak.
+    :rtype : object
+    """
+
+    d = 1 * v_exit_s1
+    # These steps are necessary in order to use Numba (don't ask why ...)
+    t = tiempo * 1.0
+    for n in xrange(number):
+        d[n, 2] = 0
+        if t >= exit0[n]:
+            d[n, 0] = v[n] + (dt / tau) * (v[n] * v[n] + eta_0[n] + tau * s_0[int(n / dn)]) + noise0[
+                int(n / dn)]  # Euler integration
+            if d[n, 0] >= vpeak:
+                d[n, 1] = t + refr_tau - (tau_peak - 1.0 / d[n, 0])
+                d[n, 2] = 1
+                d[n, 0] = -d[n, 0]
+    return d
 
 
 class Perturbation:

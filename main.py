@@ -1,18 +1,13 @@
 import Gnuplot
+import getopt
+import sys
 from timeit import default_timer as timer
 
 import numpy as np
+import progressbar as pb
 
 from nflib import Data, Connectivity, FiringRate
 from tools import Perturbation
-
-# from scipy.signal import argrelextrema
-# from scipy.fftpack import dct
-# import matplotlib.pyplot as plt
-# import matplotlib.ticker as ticker
-import sys
-import getopt
-import progressbar as pb
 
 __author__ = 'jm'
 
@@ -53,7 +48,7 @@ if __name__ == "__main__":
 # 0) PREPARE FOR CALCULATIONS
 
 # 0.1) Load data object:
-d = Data(l=100, N=int(2E4), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
+d = Data(l=100, N=int(2E5), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
 # 0.2) Create connectivity matrix and extract eigenmodes
 c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d)
 print "Modes: ", c.modes
