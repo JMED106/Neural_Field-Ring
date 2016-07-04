@@ -256,6 +256,29 @@ class Data:
                     self.matrixE[:, 0] = -0.1 * np.random.randn(self.Ne)
                     self.matrixI[:, 0] = 1.0 * self.matrixE[:, 0]
 
+    def save_ic(self, temps):
+        """ Function to save initial conditions """
+        np.save("%sic_qif_spikes_e_%s-%d" % (self.filepath, self.fileprm, self.Ne), self.spikes_e)
+        np.save("%sic_qif_spikes_i_%s-%d" % (self.filepath, self.fileprm, self.Ni), self.spikes_i)
+        self.matrixE[:, 1] = self.matrixE[:, 1] - (temps - self.dt)
+        np.save("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm, self.Ne), self.matrixE)
+        self.matrixI[:, 1] = self.matrixI[:, 1] - (temps - self.dt)
+        np.save("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm, self.Ni), self.matrixI)
+        # Introduce this combination into the database
+        try:
+            db = np.load("%sinitial_conditions.npy" % self.filepath)
+        except IOError:
+            print "Initial conditions database not found (%sinitial_conditions)" % self.filepath
+            print "Creating database ..."
+            db = False
+        if db is False:
+            np.save("%sinitial_conditions" % self.filepath,
+                    np.array([self.l, self.j0, self.eta0, self.delta, self.Ne, self.Ni]))
+        else:
+            db.resize(np.array(np.shape(db)) + [1, 0], refcheck=False)
+            db[-1] = np.array([self.l, self.j0, self.eta0, self.delta, self.Ne, self.Ni])
+            np.save("%sinitial_conditions" % self.filepath, db)
+
     @staticmethod
     def find_nearest(array, value):
         """ Extract the argument of the closest value from array """

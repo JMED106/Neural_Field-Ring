@@ -221,27 +221,9 @@ while temps < d.tfinal:
     temps += d.dt
     tstep += 1
 
-# Save initial conditions (TODO: put it into the Data class)
+# Save initial conditions
 if d.new_ic:
-    np.save("%sic_qif_spikes_e_%s-%d" % (d.filepath, d.fileprm, d.Ne), d.spikes_e)
-    np.save("%sic_qif_spikes_i_%s-%d" % (d.filepath, d.fileprm, d.Ni), d.spikes_i)
-    d.matrixE[:, 1] = d.matrixE[:, 1] - (temps - d.dt)
-    np.save("%sic_qif_matrixE_%s-%d.npy" % (d.filepath, d.fileprm, d.Ne), d.matrixE)
-    d.matrixI[:, 1] = d.matrixI[:, 1] - (temps - d.dt)
-    np.save("%sic_qif_matrixI_%s-%d.npy" % (d.filepath, d.fileprm, d.Ni), d.matrixI)
-    # Introduce this combination into the database
-    try:
-        db = np.load("%sinitial_conditions.npy" % d.filepath)
-    except IOError:
-        print "Initial conditions database not found (%sinitial_conditions)" % d.filepath
-        print "Creating database ..."
-        db = False
-    if db is False:
-        np.save("%sinitial_conditions" % d.filepath, np.array([d.l, d.j0, d.eta0, d.delta, d.Ne, d.Ni]))
-    else:
-        db.resize(np.array(np.shape(db)) + [1, 0], refcheck=False)
-        db[-1] = np.array([d.l, d.j0, d.eta0, d.delta, d.Ne, d.Ni])
-        np.save("%sinitial_conditions" % d.filepath, db)
+    d.save_ic(temps)
 
 # TODO: save firing rate time series (in the FiringRate class)
 # TODO: perturbation function (where??)
