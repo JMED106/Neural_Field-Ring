@@ -56,7 +56,7 @@ print "Modes: ", c.modes
 d.load_ic(c.modes[0], system=d.system)
 # 0.4) Load Firing rate class in case qif network is simulated
 if d.system != 'nf':
-    fr = FiringRate(data=d)
+    fr = FiringRate(data=d, swindow=0.1, sampling=0.05)
 # 0.5) Set perturbation configuration
 p = Perturbation(data=d, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
 
@@ -109,31 +109,18 @@ while temps < d.tfinal:
                 np.dot(np.array([(se + si + p.input)]).T, d.auxni).flatten()[em_i]) + noiseinput[em_e]
         else:
             # Excitatory
-            d.matrixE = qifint(d.matrixE, d.matrixE[:, 0], d.matrixE[:, 1], d.eta0, se + si + p.input, temps, d.Ne,
+            d.matrixE = qifint(d.matrixE, d.matrixE[:, 0], d.matrixE[:, 1], d.etaE, se + si + p.input, temps, d.Ne,
                                d.dNe, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
             # Inhibitory
-            d.matrixI = qifint(d.matrixI, d.matrixI[:, 0], d.matrixI[:, 1], d.eta0, se + si + p.input, temps, d.Ni,
+            d.matrixI = qifint(d.matrixI, d.matrixI[:, 0], d.matrixI[:, 1], d.etaI, se + si + p.input, temps, d.Ni,
                                d.dNi, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
 
+        # Prepare spike matrices for Mean-Field computation and firing rate measure
         # Excitatory
-        # spm_e = (d.matrixE[:, 1] <= temps) & (d.matrixE[:, 0] >= d.vpeak)
-        # # d.matrixE[spm_e, 1] = temps + 2.0 * d.tau / d.matrixE[spm_e, 0]
-        # d.matrixE[spm_e, 1] = temps + d.refr_tau - (d.tau_peak - 1.0 / d.matrixE[spm_e, 0])
-        # d.matrixE[spm_e, 2] = 1
-        # d.matrixE[~spm_e, 2] = 0
-        # d.matrixE[spm_e, 0] = -d.matrixE[spm_e, 0]
-        # #############################
         d.spikes_e_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixE[:, 2]  # We store the spikes
         d.spikes_e[:, tstep % d.T_syn] = 1 * d.spikes_e_mod[:, tstep % d.spiketime]
 
         # Inhibitory
-        # spm_i = (d.matrixI[:, 1] <= temps) & (d.matrixI[:, 0] >= d.vpeak)
-        # # d.matrixI[spm_i, 1] = temps + 2.0 * d.tau / d.matrixI[spm_i, 0]
-        # d.matrixE[spm_i, 1] = temps + d.refr_tau - (d.tau_peak - 1.0 / d.matrixE[spm_i, 0])
-        # d.matrixI[spm_i, 2] = 1
-        # d.matrixI[~spm_i, 2] = 0
-        # d.matrixI[spm_i, 0] = -d.matrixI[spm_i, 0]
-        # #############################
         d.spikes_i_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixI[:, 2]  # We store the spikes
         d.spikes_i[:, tstep % d.T_syn] = 1 * d.spikes_i_mod[:, tstep % d.spiketime]
 

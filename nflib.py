@@ -279,6 +279,11 @@ class Data:
             db[-1] = np.array([self.l, self.j0, self.eta0, self.delta, self.Ne, self.Ni])
             np.save("%sinitial_conditions" % self.filepath, db)
 
+    def save_ts(self):
+        """ Function that saves time series of the firing rate, mean membrane potential, etc. """
+        path = "./time_series"
+        fileprm = ""
+
     @staticmethod
     def find_nearest(array, value):
         """ Extract the argument of the closest value from array """
@@ -474,6 +479,7 @@ class FiringRate:
     """
 
     def __init__(self, data=None, swindow=1.0, sampling=0.01, points=None):
+        # type: (Data(), float, float, int) -> object
 
         if data is None:
             self.d = Data()
