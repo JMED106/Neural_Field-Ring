@@ -1,4 +1,5 @@
 import numpy as np
+import psutil
 from scipy import stats, special
 from scipy.fftpack import dct
 from scipy.optimize import fsolve
@@ -503,18 +504,26 @@ class FiringRate:
 
         self.tpoints_r = np.linspace(0, self.d.tfinal, self.samplingtime)
 
-        self.frspikes_e = 0 * np.ones(shape=(data.Ne, self.wsteps))  # Secondary spikes matrix (for measuring)
-        self.frspikes_i = 0 * np.ones(shape=(data.Ni, self.wsteps))
+        freemem = psutil.virtual_memory().free
+        needmem = 8 * (self.wsteps + self.d.l) * (data.Ne + data.Ni)
+        print "An approximated %d Mb amount of memory will be allocated." % (needmem / (1024 ** 2))
+        if (freemem - needmem) / (1024 ** 2) <= 0:
+            print "MEMORY ERROR: not enough amount of memory."
+            exit(-1)
+        elif (freemem - needmem) / (1024 ** 2) < 100:
+            print "CRITICAL WARNING: very few amount of memory will be left."
+            raw_input("Continue? (CTRL+C to terminate.")
+
+        self.frspikes_e = 0 * np.zeros(shape=(data.Ne, self.wsteps))  # Secondary spikes matrix (for measuring)
+        self.frspikes_i = 0 * np.zeros(shape=(data.Ni, self.wsteps))
         self.r = []  # Firing rate of the newtork(ring)
         self.frqif_e = []  # Firing rate of individual qif neurons
         self.frqif_i = []  # Firing rate of individual qif neurons
 
         # Auxiliary matrixes
-        self.auxMat = np.zeros((self.d.l, self.d.N))
         self.auxMatE = np.zeros((self.d.l, self.d.Ne))
         self.auxMatI = np.zeros((self.d.l, self.d.Ni))
         for i in xrange(self.d.l):
-            self.auxMat[i, i * self.d.dN:(i + 1) * self.d.dN] = 1.0
             self.auxMatE[i, i * self.d.dNe:(i + 1) * self.d.dNe] = 1.0
             self.auxMatI[i, i * self.d.dNi:(i + 1) * self.d.dNi] = 1.0
 
