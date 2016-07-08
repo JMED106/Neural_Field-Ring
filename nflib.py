@@ -69,6 +69,11 @@ class Data:
         self.sphi[len(self.sphi) - 1] = 0.0
 
         self.system = system
+        self.systems = []
+        if system == 'qif' or system == 'both':
+            self.systems.append('qif')
+        if system == 'nf' or system == 'both':
+            self.systems.append('nf')
 
         # 0.8) QIF model parameters
         if system is not 'nf':
@@ -180,6 +185,12 @@ class Data:
         self.new_ic = False
         self.END = False
 
+        # Post simulation:
+        self.r = {x: None for x in self.systems}
+        self.v = {x: None for x in self.systems}
+        self.t = {x: None for x in self.systems}
+        self.k = {x: None for x in self.systems}
+
     def load_ic(self, j0, system='nf'):
         """ Loads initial conditions based on the parameters. It will try to load system that
             most closely resembles. The available systems are stored in a file.
@@ -280,10 +291,21 @@ class Data:
             db[-1] = np.array([self.l, self.j0, self.eta0, self.delta, self.Ne, self.Ni])
             np.save("%sinitial_conditions" % self.filepath, db)
 
-    def save_ts(self):
-        """ Function that saves time series of the firing rate, mean membrane potential, etc. """
-        path = "./time_series"
-        fileprm = ""
+    def register_ts(self, fr=None):
+        """ Function that stores time series of the firing rate, mean membrane potential, etc.
+            into a dictionary.
+            :type fr: FiringRate()
+        """
+        if self.system == 'qif' or self.system == 'both':
+            self.r['qif'] = fr.r
+            self.v['qif'] = fr.v
+            self.t['qif'] = fr.tpoints_r
+            self.k['qif'] = None
+        if self.system == 'nf' or self.system == 'both':
+            self.r['nf'] = self.rphi
+            self.v['nf'] = self.vphi
+            self.t['nf'] = self.tpoints
+            self.k['nf'] = None
 
     @staticmethod
     def find_nearest(array, value):
@@ -314,7 +336,7 @@ class Connectivity:
         [i_n, j_n] = 2.0 * np.pi * np.float64(np.meshgrid(xrange(length), xrange(length))) / length - np.pi
         ij = np.abs(i_n - j_n)
         del i_n, j_n  # Make sure you delete these matrices here !!!
-
+        self.profile = profile
         # Type of connectivity (profile=['mex-hat', 'General Fourier Series: fs'])
         if profile == 'mex-hat':
             if (refmode is not None) and (refamp is not None):  # A reference mode has been selected
@@ -324,6 +346,8 @@ class Connectivity:
                 # Generate connectivity function with parameters amplitude, me, mi, j0
                 self.je = amplitude + j0
                 self.ji = amplitude
+                self.me = me
+                self.mi = mi
             self.cnt_e = self.vonmises(self.je, me, 0.0, mi, coords=ij)
             self.cnt_i = self.vonmises(0.0, me, self.ji, mi, coords=ij)
             self.cnt = self.vonmises(self.je, me, self.ji, mi, coords=ij)
@@ -506,17 +530,18 @@ class FiringRate:
 
         freemem = psutil.virtual_memory().free
         needmem = 8 * (self.wsteps + self.d.l) * (data.Ne + data.Ni)
-        print "An approximated %d Mb amount of memory will be allocated." % (needmem / (1024 ** 2))
+        print "An approximated %d Mb amount of memory will be allocated for FR measurement." % (needmem / (1024 ** 2))
         if (freemem - needmem) / (1024 ** 2) <= 0:
             print "MEMORY ERROR: not enough amount of memory."
             exit(-1)
         elif (freemem - needmem) / (1024 ** 2) < 100:
             print "CRITICAL WARNING: very few amount of memory will be left."
-            raw_input("Continue? (CTRL+C to terminate.")
+            raw_input("Continue? (CTRL+C to terminate).")
 
         self.frspikes_e = 0 * np.zeros(shape=(data.Ne, self.wsteps))  # Secondary spikes matrix (for measuring)
         self.frspikes_i = 0 * np.zeros(shape=(data.Ni, self.wsteps))
         self.r = []  # Firing rate of the newtork(ring)
+        self.v = []  # Firing rate of the newtork(ring)
         self.frqif_e = []  # Firing rate of individual qif neurons
         self.frqif_i = []  # Firing rate of individual qif neurons
 

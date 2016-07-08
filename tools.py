@@ -1,7 +1,10 @@
+import datetime
+import os
+
 import numba
 import numpy as np
 
-from nflib import Data
+from nflib import Data, Connectivity
 
 __author__ = 'Jose M. Esnaola Acebes'
 
@@ -36,6 +39,11 @@ def qifint(v_exit_s1, v, exit0, eta_0, s_0, tiempo, number, dn, dt, tau, vpeak, 
                 d[n, 2] = 1
                 d[n, 0] = -d[n, 0]
     return d
+
+
+def noise(length=100, disttype='g'):
+    if disttype == 'g':
+        return np.random.randn(length)
 
 
 class Perturbation:
@@ -112,3 +120,149 @@ class Perturbation:
                         self.input = self.amp
         elif self.ptype == 'oscillatory':
             pass
+
+
+class SaveResults:
+    """ Save Firing rate data to be plotted or to be loaded with numpy.
+    """
+
+    # TODO: firing rate (single neurons),
+    # TODO: potentials of single neurons ?
+    # TODO: distribution of potentials (QIF)
+    # TODO: distribution of Firing Rates (QIF)
+    # TODO: Kuramoto order parameter
+    # TODO: power spectrum
+    # TODO: frequency plot (FFT), periodogram
+    # TODO: Linear response (frequency resonance)
+
+    def __init__(self, data=None, cnt=None, pert=None, path='results', system='nf'):
+        if data is None:
+            self.d = Data()
+        else:
+            self.d = data
+        if cnt is None:
+            self.cnt = Connectivity()
+        else:
+            self.cnt = cnt
+        if pert is None:
+            self.p = Perturbation()
+        else:
+            self.p = pert
+
+        # Path of results (check path or create)
+        if os.path.isdir("./%s" % path):
+            self.path = "./results"
+        else:  # Create the path
+            os.path.os.mkdir("./%s" % path)
+        # Define file paths depending on the system (nf, qif, both)
+        self.fn = SaveResults.FileName(self.d, system)
+        self.results = dict(parameters=dict(), connectivity=dict)
+        self.results['parameters'] = {'l': self.d.l, 'eta0': self.d.eta0, 'delta': self.d.delta, 'j0': self.d.j0}
+        self.results['connectivity'] = {'type': cnt.profile, 'cnt': cnt.cnt, 'modes': cnt.modes}
+        self.results['perturbation'] = {'t0': pert.t0}
+        if cnt.profile == 'mex-hat':
+            self.results['connectivity']['je'] = cnt.je
+            self.results['connectivity']['ji'] = cnt.ji
+            self.results['connectivity']['me'] = cnt.me
+            self.results['connectivity']['mi'] = cnt.mi
+
+        if system == 'qif' or system == 'both':
+            self.results['qif'] = dict(fr=dict(), v=dict())
+            self.results['parameters']['qif'] = {'N': self.d.N, 'Ne': self.d.Ne, 'Ni': self.d.Ni}
+        if system == 'nf' or system == 'both':
+            self.results['nf'] = dict(fr=dict(), v=dict())
+
+    def create_dict(self, **kwargs):
+        for system in self.d.systems:
+            self.results[system]['t'] = self.d.t[system]
+            self.results[system]['fr'] = dict(ring=self.d.r[system])
+            self.results[system]['v'] = dict(ring=self.d.v[system])
+            if 't0' in kwargs:
+                for t0 in list(dict(kwargs)['t0']):
+                    if t0 not in self.d.t[system]:
+                        print "ERROR: %.2lf not in data, profiles not saved, terminating." % t0
+                        # Emergency save
+                        exit(-1)
+                self.results[system]['fr']['profiles'] = {t0: self.d.r[system][t0] for t0 in
+                                                          list(dict(kwargs)['t0'])}
+                self.results[system]['v']['profiles'] = {t0: self.d.v[system][t0] for t0 in
+                                                         list(dict(kwargs)['t0'])}
+
+            if 'phi0' in kwargs:
+                self.results[system]['fr']['ts'] = {phi0: self.d.r[system][:, phi0] for phi0 in
+                                                    list(dict(kwargs)['phi0'])}
+                self.results[system]['v']['ts'] = {phi0: self.d.v[system][:, phi0] for phi0 in
+                                                   list(dict(kwargs)['phi0'])}
+
+    def save(self):
+        now = datetime.datetime.now().timetuple()[0:6]
+        sday = "-".join(map(str, now[0:3]))
+        shour = "_".join(map(str, now[3:]))
+        np.save("%s/data_%s-%s" % (self.path, sday, shour), self.results)
+
+    def time_series(self, xdata, filename, export=False):
+        np.save("%s/%s" % (self.path, filename), xdata)
+
+    def profiles(self):
+        pass
+
+    class FileName:
+        """ This class just creates strings to be easily used and understood
+            (May be is too much...)
+        """
+
+        def __init__(self, data, system):
+            self.d = data
+            if system == 'qif' or system == 'both':
+                self.qif = self.Variables(data, 'qif')
+            if system == 'nf' or system == 'both':
+                self.nf = self.Variables(data, 'nf')
+
+        @staticmethod
+        def tpoints(d, system):
+            return "%s_time-colorplot_%.2lf-%.2lf-%.2lf-%d" % (system, d.j0, d.eta0, d.delta, d.l)
+
+        class Variables:
+            def __init__(self, data, t):
+                self.fr = SaveResults.FileName.FiringRate(data, t)
+                self.v = SaveResults.FileName.MeanPotential(data, t)
+                self.t = SaveResults.FileName.tpoints(data, t)
+
+        class FiringRate:
+            def __init__(self, data, system):
+                self.d = data
+                self.t = system
+                self.colorplot()
+
+            def colorplot(self):
+                # Color plot (j0, eta0, delta, l)
+                self.cp = "%s_fr-colorplot_%.2lf-%.2lf-%.2lf-%d" % (
+                    self.t, self.d.j0, self.d.eta0, self.d.delta, self.d.l)
+
+            def singlets(self, pop):
+                # Single populations
+                self.sp = "%s_fr-singlets-%d_%.2lf-%.2lf-%.2lf-%d" % (
+                    self.t, pop, self.d.j0, self.d.eta0, self.d.delta, self.d.l)
+
+            def profile(self, t0):
+                # Profile at a given t0
+                self.pr = "%s_fr-profile-%.2lf_%.2lf-%.2lf-%.2lf-%d" % (
+                    self.t, t0, self.d.j0, self.d.eta0, self.d.delta, self.d.l)
+
+        class MeanPotential:
+            def __init__(self, data, system):
+                self.d = data
+                self.t = system
+                self.colorplot()
+
+            def colorplot(self):
+                # Color plot (j0, eta0, delta, l)
+                self.cp = "v-colorplot_%.2lf-%.2lf-%.2lf-%d" % (self.d.j0, self.d.eta0, self.d.delta, self.d.l)
+
+            def singlets(self, pop):
+                # Single populations
+                self.sp = "v-singlets-%d_%.2lf-%.2lf-%.2lf-%d" % (pop, self.d.j0, self.d.eta0, self.d.delta, self.d.l)
+
+            def profile(self, t0):
+                # Profile at a given t0
+                self.pr = "v-profile-%.2lf_%.2lf-%.2lf-%.2lf-%d" % (t0, self.d.j0, self.d.eta0, self.d.delta, self.d.l)

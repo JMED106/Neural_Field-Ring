@@ -7,14 +7,9 @@ import numpy as np
 import progressbar as pb
 
 from nflib import Data, Connectivity, FiringRate
-from tools import Perturbation, qifint
+from tools import Perturbation, qifint, noise, SaveResults
 
 __author__ = 'jm'
-
-
-def noise(length=100, disttype='g'):
-    if disttype == 'g':
-        return np.random.randn(length)
 
 
 def main(argv, pmode=1, ampl=1.0, system='nf'):
@@ -41,14 +36,12 @@ selmode = 0
 selamp = 1.0
 selsystem = 'nf'
 if __name__ == "__main__":
-    selmode, selamp, selsystem = main(sys.argv[1:])
+    selmode, selamp, selsystem = main(sys.argv[1:], selmode, selamp, selsystem)
 
-############################################################################
-#############################
+###################################################################################
 # 0) PREPARE FOR CALCULATIONS
-
 # 0.1) Load data object:
-d = Data(l=100, N=int(2E5), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
+d = Data(l=100, N=int(1E3), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
 # 0.2) Create connectivity matrix and extract eigenmodes
 c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d)
 print "Modes: ", c.modes
@@ -56,30 +49,25 @@ print "Modes: ", c.modes
 d.load_ic(c.modes[0], system=d.system)
 # 0.4) Load Firing rate class in case qif network is simulated
 if d.system != 'nf':
-    fr = FiringRate(data=d, swindow=0.1, sampling=0.05)
+    fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
 # 0.5) Set perturbation configuration
 p = Perturbation(data=d, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
+# 0.6) Define saving paths:
+s = SaveResults(data=d, cnt=c, pert=p, system=d.system)
 
 # Progress-bar configuration
 widgets = ['Progress: ', pb.Percentage(), ' ',
            pb.Bar(marker=pb.RotatingMarker()), ' ', pb.ETA(), ' ']
 
 ###################################################################################
-###################################################################################
-# 0) Load Bistability searching class:
 # 1) Simulation (Integrate the system)
 print('Simulating ...')
 pbar = pb.ProgressBar(widgets=widgets, maxval=10 * (d.nsteps + 1)).start()
 time1 = timer()
 tstep = 0
 temps = 0
-tpert = 0.0
-tpertstep = 0
-END = False
-PERT = False
 
 # Time loop
-# while END is False:
 while temps < d.tfinal:
     # ######################## - PERTURBATION  - ##
     if p.pbool and not d.new_ic:
@@ -124,7 +112,7 @@ while temps < d.tfinal:
         d.spikes_i_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixI[:, 2]  # We store the spikes
         d.spikes_i[:, tstep % d.T_syn] = 1 * d.spikes_i_mod[:, tstep % d.spiketime]
 
-        # ######################## -- FIRING RATE -- ##
+        # ######################## -- FIRING RATE MEASURE -- ##
         fr.frspikes_e[:, tstep % fr.wsteps] = 1 * d.spikes_e[:, tstep % d.T_syn]
         fr.frspikes_i[:, tstep % fr.wsteps] = 1 * d.spikes_i[:, tstep % d.T_syn]
         fr.firingrate(tstep)
@@ -133,8 +121,8 @@ while temps < d.tfinal:
     # ######################## --   FR EQS.   -- ##
     if d.system == 'nf' or d.system == 'both':
         # We compute the Mean-field vector S ( 1.0/(2.0*np.pi)*dx = 1.0/l )
-        d.sphi[tstep % d.nsteps] = (1.0 / 2.0 / np.pi) * (
-            np.dot(c.cnt, d.rphi[(tstep + d.nsteps - 1) % d.nsteps]) * d.dx)
+        d.sphi[tstep % d.nsteps] = (1.0 / d.l) * (
+            np.dot(c.cnt, d.rphi[(tstep + d.nsteps - 1) % d.nsteps]))
 
         # -- Integration -- #
         d.rphi[tstep % d.nsteps] = d.rphi[(tstep + d.nsteps - 1) % d.nsteps] + d.dt * (
@@ -159,21 +147,24 @@ while temps < d.tfinal:
 
 # Finish pbar
 pbar.finish()
+# Stop the timer
+print 'Total time: {}.'.format(timer() - time1)
+if d.system == 'qif':
+    d.register_ts(fr)
+else:
+    d.register_ts()
 # Save initial conditions
 if d.new_ic:
     d.save_ic(temps)
-
-# TODO: save firing rate time series (in the FiringRate class)
-
-# Stop the timer
-time2 = timer()
-Ttime = time2 - time1
+else:  # Save results
+    s.create_dict(phi0=[d.l / 2, d.l / 4, d.l / 20])
+    s.save()
 
 gp = Gnuplot.Gnuplot(persist=1)
 p1 = Gnuplot.PlotItems.Data(np.c_[d.tpoints * d.faketau, d.rphi[:, d.l / 2] / d.faketau], with_='lines')
-p2 = Gnuplot.PlotItems.Data(np.c_[np.array(fr.tempsfr) * d.faketau, np.array(fr.r)[:, d.l / 2] / d.faketau],
-                            with_='lines')
-# p2 = Gnuplot.PlotItems.Data(np.c_[d.tpoints * d.faketau, p.it[:, d.l / 2] + d.r0 / d.faketau], with_='lines')
+if selsystem != 'nf':
+    p2 = Gnuplot.PlotItems.Data(np.c_[np.array(fr.tempsfr) * d.faketau, np.array(fr.r)[:, d.l / 2] / d.faketau],
+                                with_='lines')
+else:
+    p2 = Gnuplot.PlotItems.Data(np.c_[d.tpoints * d.faketau, p.it[:, d.l / 2] + d.r0 / d.faketau], with_='lines')
 gp.plot(p1, p2)
-
-print 'Total time: {}.'.format(Ttime)
