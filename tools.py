@@ -126,10 +126,9 @@ class SaveResults:
     """ Save Firing rate data to be plotted or to be loaded with numpy.
     """
 
-    # TODO: firing rate (single neurons),
     # TODO: potentials of single neurons ?
     # TODO: distribution of potentials (QIF)
-    # TODO: distribution of Firing Rates (QIF)
+    # TODO: firing rate (single neurons), distribution of Firing Rates (QIF)
     # TODO: Kuramoto order parameter
     # TODO: power spectrum
     # TODO: frequency plot (FFT), periodogram
@@ -195,13 +194,19 @@ class SaveResults:
                                                    list(dict(kwargs)['phi0'])}
 
     def save(self):
+        """ Saves all relevant data into a numpy object with date as file-name."""
         now = datetime.datetime.now().timetuple()[0:6]
         sday = "-".join(map(str, now[0:3]))
         shour = "_".join(map(str, now[3:]))
         np.save("%s/data_%s-%s" % (self.path, sday, shour), self.results)
 
-    def time_series(self, xdata, filename, export=False):
-        np.save("%s/%s" % (self.path, filename), xdata)
+    def time_series(self, ydata, filename, export=False, xdata=None):
+        if export is False:
+            np.save("%s/%s_y" % (self.path, filename), ydata)
+            if xdata is not None:
+                np.save("%s/%s_x" % (self.path, filename), xdata)
+        else:  # We save it as a csv file
+            np.savetxt("%s/%s.dat" % (self.path, filename), np.c_[xdata, ydata])
 
     def profiles(self):
         pass
