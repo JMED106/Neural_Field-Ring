@@ -190,6 +190,7 @@ class Data:
         self.v = {x: None for x in self.systems}
         self.t = {x: None for x in self.systems}
         self.k = {x: None for x in self.systems}
+        self.dr = {x: None for x in self.systems}
 
     def load_ic(self, j0, system='nf'):
         """ Loads initial conditions based on the parameters. It will try to load system that
@@ -301,11 +302,14 @@ class Data:
             self.v['qif'] = fr.v
             self.t['qif'] = fr.tpoints_r
             self.k['qif'] = None
+            self.dr['qif'] = dict(ex=fr.frqif_e, inh=fr.frqif_i)
+
         if self.system == 'nf' or self.system == 'both':
             self.r['nf'] = self.rphi
             self.v['nf'] = self.vphi
             self.t['nf'] = self.tpoints
             self.k['nf'] = None
+            self.dr['nf'] = fr.thdist
 
     @staticmethod
     def find_nearest(array, value):
@@ -503,6 +507,7 @@ class FiringRate:
     """ Class related to the measure of the firing rate of a neural network.
     """
 
+    # TODO: Compute theoretical distribution of firing rates
     def __init__(self, data=None, swindow=1.0, sampling=0.01, points=None):
         # type: (Data(), float, float, int) -> object
 
@@ -526,6 +531,10 @@ class FiringRate:
             self.samplingtime = sampling
             self.sampling = int(self.samplingtime / self.d.dt)
 
+        # Firing rate of single neurons (distibution of firing rates)
+        self.sampqift = 1.0 * self.swindow
+        self.sampqif = int(self.sampqift / self.d.dt)
+
         self.tpoints_r = np.linspace(0, self.d.tfinal, self.samplingtime)
 
         freemem = psutil.virtual_memory().free
@@ -544,6 +553,9 @@ class FiringRate:
         self.v = []  # Firing rate of the newtork(ring)
         self.frqif_e = []  # Firing rate of individual qif neurons
         self.frqif_i = []  # Firing rate of individual qif neurons
+
+        # Theoretical distribution of firing rates
+        self.thdist = dict()
 
         # Auxiliary matrixes
         self.auxMatE = np.zeros((self.d.l, self.d.Ne))
@@ -599,9 +611,20 @@ class FiringRate:
         """ Computes the firing rate of individual neurons.
         :return: Nothing, results are stored at frqif_e and frqif_i
         """
-        if (tstep + 1) % self.sampling == 0 and (tstep * self.d.dt >= self.swindow):
+        if (tstep + 1) % self.sampqif == 0 and (tstep * self.d.dt >= self.swindow):
             # Firing rate measure in a time window
             re = (1.0 / self.d.dt) * self.frspikes_e.mean(axis=1)
             ri = (1.0 / self.d.dt) * self.frspikes_i.mean(axis=1)
             self.frqif_e.append(re)
             self.frqif_i.append(ri)
+
+    def theor_distrb(self, s, points=10E3, rmax=3.0):
+        """ Computes theoretical distribution of firing rates """
+        rpoints = int(points)
+        rmax = rmax / self.d.faketau
+        r = np.dot(np.linspace(0, rmax, rpoints).reshape(rpoints, 1), np.ones((1, self.d.l)))
+        s = np.dot(np.ones((rpoints, 1)), (s / self.d.faketau).reshape(1, self.d.l))
+        geta = self.d.delta / ((self.d.eta0 - (np.pi ** 2 * r ** 2 - s)) ** 2 + self.d.delta ** 2)
+        rhor = 2.0 * np.pi * geta.mean(axis=1) * r.T[0]
+        # plt.plot(x.T[0], hr, 'r')
+        return r.T[0], rhor

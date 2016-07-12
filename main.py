@@ -116,6 +116,8 @@ while temps < d.tfinal:
         fr.frspikes_e[:, tstep % fr.wsteps] = 1 * d.spikes_e[:, tstep % d.T_syn]
         fr.frspikes_i[:, tstep % fr.wsteps] = 1 * d.spikes_i[:, tstep % d.T_syn]
         fr.firingrate(tstep)
+        # Distribution of Firing Rates
+        fr.singlefiringrate(tstep)
 
     # ######################## -  INTEGRATION  - ##
     # ######################## --   FR EQS.   -- ##

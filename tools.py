@@ -176,6 +176,7 @@ class SaveResults:
             self.results[system]['t'] = self.d.t[system]
             self.results[system]['fr'] = dict(ring=self.d.r[system])
             self.results[system]['v'] = dict(ring=self.d.v[system])
+            self.results[system]['fr']['distribution'] = self.d.dr[system]
             if 't0' in kwargs:
                 for t0 in list(dict(kwargs)['t0']):
                     if t0 not in self.d.t[system]:
