@@ -183,15 +183,15 @@ class SaveResults:
                         print "ERROR: %.2lf not in data, profiles not saved, terminating." % t0
                         # Emergency save
                         exit(-1)
-                self.results[system]['fr']['profiles'] = {t0: self.d.r[system][t0] for t0 in
+                self.results[system]['fr']['profiles'] = {'t%s' % str(t0): self.d.r[system][t0] for t0 in
                                                           list(dict(kwargs)['t0'])}
-                self.results[system]['v']['profiles'] = {t0: self.d.v[system][t0] for t0 in
+                self.results[system]['v']['profiles'] = {'t%s' % str(t0): self.d.v[system][t0] for t0 in
                                                          list(dict(kwargs)['t0'])}
 
             if 'phi0' in kwargs:
-                self.results[system]['fr']['ts'] = {phi0: self.d.r[system][:, phi0] for phi0 in
+                self.results[system]['fr']['ts'] = {'p%s' % str(phi0): self.d.r[system][:, phi0] for phi0 in
                                                     list(dict(kwargs)['phi0'])}
-                self.results[system]['v']['ts'] = {phi0: self.d.v[system][:, phi0] for phi0 in
+                self.results[system]['v']['ts'] = {'p%s' % str(phi0): self.d.v[system][:, phi0] for phi0 in
                                                    list(dict(kwargs)['phi0'])}
 
     def save(self):
@@ -272,3 +272,54 @@ class SaveResults:
             def profile(self, t0):
                 # Profile at a given t0
                 self.pr = "v-profile-%.2lf_%.2lf-%.2lf-%.2lf-%d" % (t0, self.d.j0, self.d.eta0, self.d.delta, self.d.l)
+
+
+class TheoreticalComputations:
+    def __init__(self, data=None, cnt=None, pert=None):
+        if data is None:
+            self.d = Data()
+        else:
+            self.d = data
+        if cnt is None:
+            self.cnt = Connectivity()
+        else:
+            self.cnt = cnt
+        if pert is None:
+            self.p = Perturbation()
+        else:
+            self.p = pert
+
+        # Theoretical distribution of firing rates
+        self.thdist = dict()
+
+    def theor_distrb(self, s, points=10E3, rmax=3.0):
+        """ Computes theoretical distribution of firing rates
+        :param s: Mean field (J*r) rescaled (tau = 1)
+        :param points: number of points for the plot
+        :param rmax: maximum firing rate of the distribution
+        :return: rho(r) vs r (output -> r, rho(r))
+        """
+        rpoints = int(points)
+        rmax = rmax / self.d.faketau
+        r = np.dot(np.linspace(0, rmax, rpoints).reshape(rpoints, 1), np.ones((1, self.d.l)))
+        s = np.dot(np.ones((rpoints, 1)), s.reshape(1, self.d.l))
+        geta = self.d.delta / ((self.d.eta0 - (np.pi ** 2 * self.d.faketau ** 2 * r ** 2 - s)) ** 2 + self.d.delta ** 2)
+        rhor = 2.0 * np.pi * self.d.tau ** 2 * geta.mean(axis=1) * r.T[0]
+        # plt.plot(x.T[0], hr, 'r')
+        return dict(x=r.T[0], y=rhor)
+
+
+class DictToObj(object):
+    """Class that transforms a dictionary d into an object. Note that dictionary keys must be
+       strings and cannot be just numbers (even if they are strings:
+               if a key is of the format '4', -> put some letter at the beginning,
+               something of the style 'f4'.
+       Class obtained from stackoverflow: user Nadia Alramli.
+ `  """
+
+    def __init__(self, d):
+        for a, b in d.items():
+            if isinstance(b, (list, tuple)):
+                setattr(self, a, [DictToObj(x) if isinstance(x, dict) else x for x in b])
+            else:
+                setattr(self, a, DictToObj(b) if isinstance(b, dict) else b)

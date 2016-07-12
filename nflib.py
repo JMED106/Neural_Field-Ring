@@ -292,24 +292,25 @@ class Data:
             db[-1] = np.array([self.l, self.j0, self.eta0, self.delta, self.Ne, self.Ni])
             np.save("%sinitial_conditions" % self.filepath, db)
 
-    def register_ts(self, fr=None):
+    def register_ts(self, fr=None, th=None):
         """ Function that stores time series of the firing rate, mean membrane potential, etc.
             into a dictionary.
             :type fr: FiringRate()
+            :param th: TheoreticalComputations() in tools
         """
         if self.system == 'qif' or self.system == 'both':
             self.r['qif'] = fr.r
             self.v['qif'] = fr.v
             self.t['qif'] = fr.tpoints_r
             self.k['qif'] = None
-            self.dr['qif'] = dict(ex=fr.frqif_e, inh=fr.frqif_i)
+            self.dr['qif'] = dict(ex=fr.frqif_e, inh=fr.frqif_i, all=fr.frqif)
 
         if self.system == 'nf' or self.system == 'both':
             self.r['nf'] = self.rphi
             self.v['nf'] = self.vphi
             self.t['nf'] = self.tpoints
             self.k['nf'] = None
-            self.dr['nf'] = fr.thdist
+            self.dr['nf'] = th.thdist
 
     @staticmethod
     def find_nearest(array, value):
@@ -553,6 +554,11 @@ class FiringRate:
         self.v = []  # Firing rate of the newtork(ring)
         self.frqif_e = []  # Firing rate of individual qif neurons
         self.frqif_i = []  # Firing rate of individual qif neurons
+        self.frqif = None
+
+        # Total spikes of the network:
+        self.tspikes_e = 0 * np.ones(data.Ne)
+        self.tspikes_i = 0 * np.ones(data.Ni)
 
         # Theoretical distribution of firing rates
         self.thdist = dict()
@@ -605,7 +611,6 @@ class FiringRate:
             # vsample = np.ma.masked_where(np.abs(v) >= vpeak, v).mean(axis=0).data
             # This 1/dN is wrong ()
             # vavg[rsum_count] = (1.0/dN)*np.dot(auxMat, vsample)
-            self.ravg += 1
 
     def singlefiringrate(self, tstep):
         """ Computes the firing rate of individual neurons.
@@ -617,14 +622,3 @@ class FiringRate:
             ri = (1.0 / self.d.dt) * self.frspikes_i.mean(axis=1)
             self.frqif_e.append(re)
             self.frqif_i.append(ri)
-
-    def theor_distrb(self, s, points=10E3, rmax=3.0):
-        """ Computes theoretical distribution of firing rates """
-        rpoints = int(points)
-        rmax = rmax / self.d.faketau
-        r = np.dot(np.linspace(0, rmax, rpoints).reshape(rpoints, 1), np.ones((1, self.d.l)))
-        s = np.dot(np.ones((rpoints, 1)), (s / self.d.faketau).reshape(1, self.d.l))
-        geta = self.d.delta / ((self.d.eta0 - (np.pi ** 2 * r ** 2 - s)) ** 2 + self.d.delta ** 2)
-        rhor = 2.0 * np.pi * geta.mean(axis=1) * r.T[0]
-        # plt.plot(x.T[0], hr, 'r')
-        return r.T[0], rhor

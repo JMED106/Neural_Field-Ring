@@ -7,7 +7,7 @@ import numpy as np
 import progressbar as pb
 
 from nflib import Data, Connectivity, FiringRate
-from tools import Perturbation, qifint, noise, SaveResults
+from tools import Perturbation, qifint, noise, SaveResults, TheoreticalComputations
 
 __author__ = 'jm'
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
 # 0.1) Load data object:
 d = Data(l=100, N=int(1E3), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
 # 0.2) Create connectivity matrix and extract eigenmodes
-c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d)
+c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d, refmode=4, refamp=8 / np.sqrt(0.5))
 print "Modes: ", c.modes
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
@@ -54,6 +54,8 @@ if d.system != 'nf':
 p = Perturbation(data=d, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
 # 0.6) Define saving paths:
 s = SaveResults(data=d, cnt=c, pert=p, system=d.system)
+# 0.7) Other theoretical tools:
+th = TheoreticalComputations(d, c, p)
 
 # Progress-bar configuration
 widgets = ['Progress: ', pb.Percentage(), ' ',
@@ -117,7 +119,10 @@ while temps < d.tfinal:
         fr.frspikes_i[:, tstep % fr.wsteps] = 1 * d.spikes_i[:, tstep % d.T_syn]
         fr.firingrate(tstep)
         # Distribution of Firing Rates
-        fr.singlefiringrate(tstep)
+        if tstep > 0:
+            fr.tspikes_e += d.matrixE[:, 2]
+            fr.tspikes_i += d.matrixI[:, 2]
+            fr.ravg += 1
 
     # ######################## -  INTEGRATION  - ##
     # ######################## --   FR EQS.   -- ##
@@ -151,10 +156,25 @@ while temps < d.tfinal:
 pbar.finish()
 # Stop the timer
 print 'Total time: {}.'.format(timer() - time1)
-if d.system == 'qif':
-    d.register_ts(fr)
+
+# Compute distribution of firing rates of neurons
+tstep -= 1
+temps -= d.dt
+th.thdist = th.theor_distrb(d.sphi[tstep % d.nsteps])
+
+# Register data to a dictionary
+if 'qif' in d.systems:
+    fr.frqif_e = fr.frspikes_e / (fr.ravg * d.dt) / d.faketau
+    fr.frqif_i = fr.frspikes_i / (fr.ravg * d.dt) / d.faketau
+    fr.frqif = np.concatenate((fr.frqif_e, fr.frqif_i))
+
+    if 'nf' in d.systems:
+        d.register_ts(fr, th)
+    else:
+        d.register_ts(fr)
 else:
-    d.register_ts()
+    d.register_ts(th=th)
+
 # Save initial conditions
 if d.new_ic:
     d.save_ic(temps)
