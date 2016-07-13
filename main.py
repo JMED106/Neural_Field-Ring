@@ -7,7 +7,7 @@ import numpy as np
 import progressbar as pb
 
 from nflib import Data, Connectivity, FiringRate
-from tools import Perturbation, qifint, noise, SaveResults, TheoreticalComputations
+from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, TheoreticalComputations
 
 __author__ = 'jm'
 
@@ -34,14 +34,14 @@ def main(argv, pmode=1, ampl=1.0, system='nf'):
 
 selmode = 0
 selamp = 1.0
-selsystem = 'nf'
+selsystem = 'both'
 if __name__ == "__main__":
     selmode, selamp, selsystem = main(sys.argv[1:], selmode, selamp, selsystem)
 
 ###################################################################################
 # 0) PREPARE FOR CALCULATIONS
 # 0.1) Load data object:
-d = Data(l=100, N=int(1E3), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
+d = Data(l=100, N=int(2E5), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
 # 0.2) Create connectivity matrix and extract eigenmodes
 c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d, refmode=4, refamp=8 / np.sqrt(0.5))
 print "Modes: ", c.modes
@@ -51,7 +51,7 @@ d.load_ic(c.modes[0], system=d.system)
 if d.system != 'nf':
     fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
 # 0.5) Set perturbation configuration
-p = Perturbation(data=d, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
+p = Perturbation(data=d, dt=1.0, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
 # 0.6) Define saving paths:
 s = SaveResults(data=d, cnt=c, pert=p, system=d.system)
 # 0.7) Other theoretical tools:
@@ -83,20 +83,17 @@ while temps < d.tfinal:
         # We compute the Mean-field vector s_j
         se = (1.0 / d.Ne) * np.dot(c.cnt_e, np.dot(fr.auxMatE, np.dot(d.spikes_e, d.a_tau[:, tstep % d.T_syn])))
         si = (1.0 / d.Ni) * np.dot(c.cnt_i, np.dot(fr.auxMatI, np.dot(d.spikes_i, d.a_tau[:, tstep % d.T_syn])))
-        # Vectorized algorithm
-        em_e = (d.matrixE[:, 1] <= temps)  # Excitatory
-        em_i = (d.matrixI[:, 1] <= temps)  # Inhibitory
 
         if d.fp == 'noise':
             noiseinput = np.sqrt(2.0 * d.dt / d.tau * d.delta) * noise(d.N)
             # Excitatory
-            d.matrixE[em_e, 0] += (d.dt / d.tau) * (
-                d.matrixE[em_e, 0] * d.matrixE[em_e, 0] + d.eta0 + d.tau *
-                np.dot(np.array([(se + si + p.input)]).T, d.auxne).flatten()[em_e]) + noiseinput[em_e]
+            d.matrixE = qifint_noise(d.matrixE, d.matrixE[:, 0], d.matrixE[:, 1], d.etaE, se + si + p.input,
+                                     noiseinput[0:d.Ne], temps, d.Ne,
+                                     d.dNe, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
             # Inhibitory
-            d.matrixI[em_i, 0] += (d.dt / d.tau) * (
-                d.matrixI[em_e, 0] * d.matrixI[em_e, 0] + d.eta0 + d.tau *
-                np.dot(np.array([(se + si + p.input)]).T, d.auxni).flatten()[em_i]) + noiseinput[em_e]
+            d.matrixI = qifint_noise(d.matrixI, d.matrixI[:, 0], d.matrixI[:, 1], d.etaI, se + si + p.input,
+                                     noiseinput[d.Ne:], temps, d.Ni,
+                                     d.dNi, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
         else:
             # Excitatory
             d.matrixE = qifint(d.matrixE, d.matrixE[:, 0], d.matrixE[:, 1], d.etaE, se + si + p.input, temps, d.Ne,
@@ -109,10 +106,16 @@ while temps < d.tfinal:
         # Excitatory
         d.spikes_e_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixE[:, 2]  # We store the spikes
         d.spikes_e[:, tstep % d.T_syn] = 1 * d.spikes_e_mod[:, tstep % d.spiketime]
+        # Voltage measure:
+        vma_e = (d.matrixE[:, 1] <= temps)  # Neurons which are not in the refractory period
+        fr.vavg_e[vma_e] += d.matrixE[vma_e, 0]
 
         # Inhibitory
         d.spikes_i_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixI[:, 2]  # We store the spikes
         d.spikes_i[:, tstep % d.T_syn] = 1 * d.spikes_i_mod[:, tstep % d.spiketime]
+        vma_i = (d.matrixI[:, 1] <= temps)  # Neurons which are not in the refractory period
+        fr.vavg_i[vma_i] += d.matrixE[vma_i, 0]
+        fr.vavg += 1
 
         # ######################## -- FIRING RATE MEASURE -- ##
         fr.frspikes_e[:, tstep % fr.wsteps] = 1 * d.spikes_e[:, tstep % d.T_syn]
@@ -164,8 +167,8 @@ th.thdist = th.theor_distrb(d.sphi[tstep % d.nsteps])
 
 # Register data to a dictionary
 if 'qif' in d.systems:
-    fr.frqif_e = fr.frspikes_e / (fr.ravg * d.dt) / d.faketau
-    fr.frqif_i = fr.frspikes_i / (fr.ravg * d.dt) / d.faketau
+    fr.frqif_e = fr.tspikes_e / (fr.ravg * d.dt) / d.faketau
+    fr.frqif_i = fr.tspikes_i / (fr.ravg * d.dt) / d.faketau
     fr.frqif = np.concatenate((fr.frqif_e, fr.frqif_i))
 
     if 'nf' in d.systems:
@@ -179,9 +182,11 @@ else:
 if d.new_ic:
     d.save_ic(temps)
 else:  # Save results
-    s.create_dict(phi0=[d.l / 2, d.l / 4, d.l / 20])
+    s.create_dict(phi0=[d.l / 2, d.l / 4, d.l / 20], t0=int(d.total_time / 10) * np.array([2, 4, 6, 8]))
+    s.results['perturbation']['It'] = p.it
     s.save()
 
+# Preliminar plotting with gnuplot
 gp = Gnuplot.Gnuplot(persist=1)
 p1 = Gnuplot.PlotItems.Data(np.c_[d.tpoints * d.faketau, d.rphi[:, d.l / 2] / d.faketau], with_='lines')
 if selsystem != 'nf':

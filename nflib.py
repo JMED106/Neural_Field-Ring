@@ -299,9 +299,9 @@ class Data:
             :param th: TheoreticalComputations() in tools
         """
         if self.system == 'qif' or self.system == 'both':
-            self.r['qif'] = fr.r
-            self.v['qif'] = fr.v
-            self.t['qif'] = fr.tpoints_r
+            self.r['qif'] = np.array(fr.r)
+            self.v['qif'] = np.array(fr.v)
+            self.t['qif'] = fr.tempsfr
             self.k['qif'] = None
             self.dr['qif'] = dict(ex=fr.frqif_e, inh=fr.frqif_i, all=fr.frqif)
 
@@ -536,22 +536,28 @@ class FiringRate:
         self.sampqift = 1.0 * self.swindow
         self.sampqif = int(self.sampqift / self.d.dt)
 
-        self.tpoints_r = np.linspace(0, self.d.tfinal, self.samplingtime)
+        self.tpoints_r = np.arange(0, self.d.tfinal, self.samplingtime)
 
-        freemem = psutil.virtual_memory().free
+        freemem = psutil.virtual_memory().available
         needmem = 8 * (self.wsteps + self.d.l) * (data.Ne + data.Ni)
-        print "An approximated %d Mb amount of memory will be allocated for FR measurement." % (needmem / (1024 ** 2))
+        print "Approximately %d MB of memory will be allocated for FR measurement." % (needmem / (1024 ** 2))
         if (freemem - needmem) / (1024 ** 2) <= 0:
-            print "MEMORY ERROR: not enough amount of memory."
+            print "MEMORY ERROR: not enough amount of memory available."
             exit(-1)
         elif (freemem - needmem) / (1024 ** 2) < 100:
             print "CRITICAL WARNING: very few amount of memory will be left."
-            raw_input("Continue? (CTRL+C to terminate).")
+            try:
+                raw_input("Continue? (any key to continue, CTRL+D to terminate).")
+            except EOFError:
+                print "Terminating process."
+                exit(-1)
 
         self.frspikes_e = 0 * np.zeros(shape=(data.Ne, self.wsteps))  # Secondary spikes matrix (for measuring)
         self.frspikes_i = 0 * np.zeros(shape=(data.Ni, self.wsteps))
         self.r = []  # Firing rate of the newtork(ring)
         self.v = []  # Firing rate of the newtork(ring)
+        self.vavg_e = 0.0 * np.ones(data.Ne)
+        self.vavg_i = 0.0 * np.ones(data.Ni)
         self.frqif_e = []  # Firing rate of individual qif neurons
         self.frqif_i = []  # Firing rate of individual qif neurons
         self.frqif = None
@@ -574,6 +580,7 @@ class FiringRate:
         #
         # Auxiliary counters
         self.ravg = 0
+        self.vavg = 0
 
         # Times of firing rate measures
         self.t0step = None
@@ -608,6 +615,9 @@ class FiringRate:
 
             # self.r2[tstep % self.d.nsteps] = 1.0 * self.r[self.rsum_count]
             # Average of the voltages over a time window and over the populations
+            self.v.append(
+                (1.0 / self.d.dNe) * np.dot(self.auxMatE, self.vavg_e / self.vavg) + (1.0 / self.d.dNi) * np.dot(
+                    self.auxMatI, self.vavg_i / self.vavg))
             # vsample = np.ma.masked_where(np.abs(v) >= vpeak, v).mean(axis=0).data
             # This 1/dN is wrong ()
             # vavg[rsum_count] = (1.0/dN)*np.dot(auxMat, vsample)
