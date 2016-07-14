@@ -208,7 +208,11 @@ class Data:
 
         if system == 'qif' or system == 'both':
             print "Loading initial conditions ... "
-            self.fileprm = '%s_%.2lf-%.2lf-%.2lf-%d' % (self.fp, j0, self.eta0, self.delta, self.l)
+            if np.abs(j0) < 1E-2:
+                j0zero = 0.0
+            else:
+                j0zero = j0
+            self.fileprm = '%s_%.2lf-%.2lf-%.2lf-%d' % (self.fp, j0zero, self.eta0, self.delta, self.l)
             # We first try to load files that correspond to chosen parameters
             try:
                 self.spikes_e = np.load("%sic_qif_spikes_e_%s-%d.npy" % (self.filepath, self.fileprm, self.Ne))
@@ -248,13 +252,13 @@ class Data:
                     ma = ((database[:, 0] == self.l) & (database[:, -2] == self.Ne) & (database[:, -1] == self.Ni))
                     # Find the closest combination by comparing with the theoretically obtained firing rate
                     idx = self.find_nearest(database[ma][:, -1], self.r0)
-                    (j02, eta, delta, Ne, Ni) = database[ma][idx, 1:]
+                    (j02, eta, delta, ne, ni) = database[ma][idx, 1:]
                     self.fileprm2 = '%s_%.2lf-%.2lf-%.2lf-%d' % (self.fp, j02, eta, delta, self.l)
                     try:
-                        self.spikes_e = np.load("%sic_qif_spikes_e_%s-%d.npy" % (self.filepath, self.fileprm2, Ne))
-                        self.spikes_i = np.load("%sic_qif_spikes_i_%s-%d.npy" % (self.filepath, self.fileprm2, Ni))
-                        self.matrixE = np.load("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm2, Ne))
-                        self.matrixI = np.load("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm2, Ni))
+                        self.spikes_e = np.load("%sic_qif_spikes_e_%s-%d.npy" % (self.filepath, self.fileprm2, ne))
+                        self.spikes_i = np.load("%sic_qif_spikes_i_%s-%d.npy" % (self.filepath, self.fileprm2, ni))
+                        self.matrixE = np.load("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm2, ne))
+                        self.matrixI = np.load("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm2, ni))
                         print "Successfully loaded all data matrices."
                     except IOError:
                         print "Files do not exist or cannot be read. This behavior wasn't expected ..."
@@ -303,7 +307,7 @@ class Data:
             self.v['qif'] = np.array(fr.v)
             self.t['qif'] = fr.tempsfr
             self.k['qif'] = None
-            self.dr['qif'] = dict(ex=fr.frqif_e, inh=fr.frqif_i, all=fr.frqif)
+            self.dr['qif'] = dict(ex=fr.frqif_e, inh=fr.frqif_i, all=fr.frqif, inst=fr.rqif)
 
         if self.system == 'nf' or self.system == 'both':
             self.r['nf'] = self.rphi
@@ -364,6 +368,10 @@ class Connectivity:
             if fsmodes is None:
                 fsmodes = [0, 6]  # Default values
             self.cnt = self.jcntvty(fsmodes, coords=ij)
+            # TODO: separate excitatory and inhibitory connectivity
+            ma = (self.cnt > 0)
+            self.cnt_e[ma] = self.cnt[ma]
+            self.cnt_i[~ma] = self.cnt[~ma]
             self.modes = fsmodes
         del ij
 
@@ -433,7 +441,17 @@ class Connectivity:
         if r0 is None:  # We have to compute the firing rate at the stationary state
             r0 = Connectivity.rtheory(modes[0], eta, delta)
         r0u = r0 / tau
-        return r0u * np.sqrt(1.0 - modes / (2 * np.pi ** 2 * tau * r0u))
+        f = []
+        for k, m in enumerate(modes):
+            if m / (2 * np.pi ** 2 * tau * r0u) <= 1:
+                f.append(r0u * np.sqrt(1.0 - m / (2 * np.pi ** 2 * tau * r0u)))
+            else:
+                f.append(r0u * np.sqrt(m / (2 * np.pi ** 2 * tau * r0u) - 1.0))
+                print "Fixed point is above the Saddle Node bifurcation for k = %d: there are not " \
+                      "decaying oscillations for the homogeneous state." % k
+                print "These values plus the one corresponding to the decay are now the actual decays of overdamped " \
+                      "oscillations."
+        return f
 
     @staticmethod
     def gauss0_pdf(x, std):
@@ -508,7 +526,6 @@ class FiringRate:
     """ Class related to the measure of the firing rate of a neural network.
     """
 
-    # TODO: Compute theoretical distribution of firing rates
     def __init__(self, data=None, swindow=1.0, sampling=0.01, points=None):
         # type: (Data(), float, float, int) -> object
 
@@ -555,6 +572,7 @@ class FiringRate:
         self.frspikes_e = 0 * np.zeros(shape=(data.Ne, self.wsteps))  # Secondary spikes matrix (for measuring)
         self.frspikes_i = 0 * np.zeros(shape=(data.Ni, self.wsteps))
         self.r = []  # Firing rate of the newtork(ring)
+        self.rqif = []
         self.v = []  # Firing rate of the newtork(ring)
         self.vavg_e = 0.0 * np.ones(data.Ne)
         self.vavg_i = 0.0 * np.ones(data.Ni)
@@ -565,6 +583,8 @@ class FiringRate:
         # Total spikes of the network:
         self.tspikes_e = 0 * np.ones(data.Ne)
         self.tspikes_i = 0 * np.ones(data.Ni)
+        self.tspikes_e2 = 0 * np.ones(data.Ne)
+        self.tspikes_i2 = 0 * np.ones(data.Ni)
 
         # Theoretical distribution of firing rates
         self.thdist = dict()
@@ -576,10 +596,9 @@ class FiringRate:
             self.auxMatE[i, i * self.d.dNe:(i + 1) * self.d.dNe] = 1.0
             self.auxMatI[i, i * self.d.dNi:(i + 1) * self.d.dNi] = 1.0
 
-        # TODO FIRING RATE of individual neurons (distribution of FR)
-        #
         # Auxiliary counters
         self.ravg = 0
+        self.ravg2 = 0
         self.vavg = 0
 
         # Times of firing rate measures
@@ -610,17 +629,26 @@ class FiringRate:
             self.tempsfr.append(self.temps - self.swindow / 2.0)
             self.tempsfr2.append(self.temps)
 
-            # Single neurons firing rate
-            # self.rqif[self.rsum_count % self.rpointmax] = (1.0 / self.d.dt)  * self.S2.mean(axis=1)
+            # Single neurons firing rate in a given time (averaging over a time window)
+            self.rqif.append(np.concatenate((self.tspikes_e2, self.tspikes_i2)))
+            self.rqif[-1] /= (self.ravg2 * self.d.dt * self.d.faketau)
+            # We store total spikes for the "total time average" distribution of FR
+            self.tspikes_e += self.tspikes_e2
+            self.tspikes_i += self.tspikes_i2
 
-            # self.r2[tstep % self.d.nsteps] = 1.0 * self.r[self.rsum_count]
+            # Reset vectors and counter
+            self.tspikes_e2 = 0.0 * np.ones(self.d.Ne)
+            self.tspikes_i2 = 0.0 * np.ones(self.d.Ni)
+            self.ravg2 = 0
+
             # Average of the voltages over a time window and over the populations
-            self.v.append(
-                (1.0 / self.d.dNe) * np.dot(self.auxMatE, self.vavg_e / self.vavg) + (1.0 / self.d.dNi) * np.dot(
-                    self.auxMatI, self.vavg_i / self.vavg))
-            # vsample = np.ma.masked_where(np.abs(v) >= vpeak, v).mean(axis=0).data
-            # This 1/dN is wrong ()
-            # vavg[rsum_count] = (1.0/dN)*np.dot(auxMat, vsample)
+            self.v.append(0.5 *
+                          ((1.0 / self.d.dNe) * np.dot(self.auxMatE, self.vavg_e / self.vavg) + (
+                              1.0 / self.d.dNi) * np.dot(
+                              self.auxMatI, self.vavg_i / self.vavg)))
+            self.vavg = 0
+            self.vavg_e = 0.0 * np.ones(self.d.Ne)
+            self.vavg_i = 0.0 * np.ones(self.d.Ni)
 
     def singlefiringrate(self, tstep):
         """ Computes the firing rate of individual neurons.

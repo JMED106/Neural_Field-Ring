@@ -43,7 +43,8 @@ if __name__ == "__main__":
 # 0.1) Load data object:
 d = Data(l=100, N=int(2E5), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
 # 0.2) Create connectivity matrix and extract eigenmodes
-c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d, refmode=4, refamp=8 / np.sqrt(0.5))
+c = Connectivity(d.l, data=d, profile='fs', fsmodes=[0, 15 / np.sqrt(0.5)])
+# c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d, refmode=4, refamp=8 / np.sqrt(0.5))
 print "Modes: ", c.modes
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
@@ -51,7 +52,7 @@ d.load_ic(c.modes[0], system=d.system)
 if d.system != 'nf':
     fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
 # 0.5) Set perturbation configuration
-p = Perturbation(data=d, dt=1.0, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
+p = Perturbation(data=d, dt=10.0, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
 # 0.6) Define saving paths:
 s = SaveResults(data=d, cnt=c, pert=p, system=d.system)
 # 0.7) Other theoretical tools:
@@ -114,7 +115,7 @@ while temps < d.tfinal:
         d.spikes_i_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixI[:, 2]  # We store the spikes
         d.spikes_i[:, tstep % d.T_syn] = 1 * d.spikes_i_mod[:, tstep % d.spiketime]
         vma_i = (d.matrixI[:, 1] <= temps)  # Neurons which are not in the refractory period
-        fr.vavg_i[vma_i] += d.matrixE[vma_i, 0]
+        fr.vavg_i[vma_i] += d.matrixI[vma_i, 0]
         fr.vavg += 1
 
         # ######################## -- FIRING RATE MEASURE -- ##
@@ -123,9 +124,10 @@ while temps < d.tfinal:
         fr.firingrate(tstep)
         # Distribution of Firing Rates
         if tstep > 0:
-            fr.tspikes_e += d.matrixE[:, 2]
-            fr.tspikes_i += d.matrixI[:, 2]
-            fr.ravg += 1
+            fr.tspikes_e2 += d.matrixE[:, 2]
+            fr.tspikes_i2 += d.matrixI[:, 2]
+            fr.ravg2 += 1  # Counter for the "instantaneous" distribution
+            fr.ravg += 1  # Counter for the "total time average" distribution
 
     # ######################## -  INTEGRATION  - ##
     # ######################## --   FR EQS.   -- ##
@@ -167,6 +169,7 @@ th.thdist = th.theor_distrb(d.sphi[tstep % d.nsteps])
 
 # Register data to a dictionary
 if 'qif' in d.systems:
+    # Distribution of firing rates over all time
     fr.frqif_e = fr.tspikes_e / (fr.ravg * d.dt) / d.faketau
     fr.frqif_i = fr.tspikes_i / (fr.ravg * d.dt) / d.faketau
     fr.frqif = np.concatenate((fr.frqif_e, fr.frqif_i))

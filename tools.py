@@ -160,7 +160,6 @@ class SaveResults:
 
     # TODO: potentials of single neurons ?
     # TODO: distribution of potentials (QIF)
-    # TODO: firing rate (single neurons), distribution of Firing Rates (QIF)
     # TODO: Kuramoto order parameter
     # TODO: power spectrum
     # TODO: frequency plot (FFT), periodogram
