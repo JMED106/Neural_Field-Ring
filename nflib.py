@@ -76,7 +76,7 @@ class Data:
             self.systems.append('nf')
 
         # 0.8) QIF model parameters
-        if system is not 'nf':
+        if system != 'nf':
             print "Loading QIF parameters:"
             print "***********************"
             self.fp = fp

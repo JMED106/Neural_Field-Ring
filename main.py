@@ -12,16 +12,20 @@ from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, Theore
 __author__ = 'jm'
 
 
-def main(argv, pmode=1, ampl=1.0, system='nf'):
+def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', number=2E5, n=100, eta=4.0, delta=0.5):
     try:
-        opts, args = getopt.getopt(argv, "hm:a:s:", ["mode=", "amp=", "system="])
+        opts, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:",
+                                   ["mode=", "amp=", "system=", "connec=", "neurons=", "lenght=", "extcurr=",
+                                    "widthcurr="])
     except getopt.GetoptError:
-        print 'main.py -m <mode> -a <amplitude> -s <system>'
+        print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
+              '-n <lenght-of-ring-e <external-current> -d <widt-of-dist>]'
         sys.exit(2)
 
     for opt, arg in opts:
         if opt == '-h':
-            print 'main.py -m <mode> -a <amplitude> -s <system>'
+            print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
+                  '-n <lenght-of-ring-e <external-current> -d <widt-of-dist>]'
             sys.exit()
         elif opt in ("-m", "--mode"):
             pmode = int(arg)
@@ -29,22 +33,40 @@ def main(argv, pmode=1, ampl=1.0, system='nf'):
             ampl = float(arg)
         elif opt in ("-s", "--system"):
             system = arg
-    return pmode, ampl, system
+        elif opt in ("-c", "--connec"):
+            cnt = arg
+        elif opt in ("-N", "--neurons"):
+            number = int(arg)
+        elif opt in ("-n", "--length"):
+            n = int(arg)
+        elif opt in ("-e", "--extcurr"):
+            eta = float(arg)
+        elif opt in ("-d", "--widthcurr"):
+            delta = float(arg)
+
+    return pmode, ampl, system, cnt, number, n, eta, delta
 
 
 selmode = 0
 selamp = 1.0
 selsystem = 'both'
+selcnt = 'mex-hat'
+selnumber = 2E5
+sellength = 100
+seleta = 4.0
+seldelta = 0.5
 if __name__ == "__main__":
-    selmode, selamp, selsystem = main(sys.argv[1:], selmode, selamp, selsystem)
+    selmode, selamp, selsystem, selcnt, selnumber, sellength, seleta, seldelta = main(sys.argv[1:], selmode, selamp,
+                                                                                      selsystem, selcnt, selnumber,
+                                                                                      sellength, seleta, seldelta)
 
 ###################################################################################
 # 0) PREPARE FOR CALCULATIONS
 # 0.1) Load data object:
-d = Data(l=100, N=int(2E5), eta0=4.0, delta=0.5, tfinal=20.0, system=selsystem)
+d = Data(l=sellength, N=selnumber, eta0=seleta, delta=seldelta, tfinal=20.0, system=selsystem)
 # 0.2) Create connectivity matrix and extract eigenmodes
-c = Connectivity(d.l, data=d, profile='fs', fsmodes=[0, 15 / np.sqrt(0.5)])
-# c = Connectivity(d.l, profile='mex-hat', amplitude=10.0, data=d, refmode=4, refamp=8 / np.sqrt(0.5))
+# c = Connectivity(d.l, data=d, profile='fs', fsmodes=[0, 15 / np.sqrt(0.5)])
+c = Connectivity(d.l, profile=selcnt, amplitude=10.0, data=d)
 print "Modes: ", c.modes
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
@@ -52,7 +74,7 @@ d.load_ic(c.modes[0], system=d.system)
 if d.system != 'nf':
     fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
 # 0.5) Set perturbation configuration
-p = Perturbation(data=d, dt=10.0, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
+p = Perturbation(data=d, dt=0.5, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
 # 0.6) Define saving paths:
 s = SaveResults(data=d, cnt=c, pert=p, system=d.system)
 # 0.7) Other theoretical tools:

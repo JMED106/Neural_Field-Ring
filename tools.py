@@ -189,7 +189,7 @@ class SaveResults:
         self.results = dict(parameters=dict(), connectivity=dict)
         self.results['parameters'] = {'l': self.d.l, 'eta0': self.d.eta0, 'delta': self.d.delta, 'j0': self.d.j0,
                                       'tau': self.d.faketau}
-        self.results['connectivity'] = {'type': cnt.profile, 'cnt': cnt.cnt, 'modes': cnt.modes}
+        self.results['connectivity'] = {'type': cnt.profile, 'cnt': cnt.cnt, 'modes': cnt.modes, 'freqs': cnt.freqs}
         self.results['perturbation'] = {'t0': pert.t0}
         if cnt.profile == 'mex-hat':
             self.results['connectivity']['je'] = cnt.je
