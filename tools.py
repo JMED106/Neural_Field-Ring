@@ -80,7 +80,7 @@ def find_nearest(array, value, ret='id'):
 class Perturbation:
     """ Tool to handle perturbations: time, duration, shape (attack, decay, sustain, release (ADSR), etc. """
 
-    def __init__(self, data=None, t0=1.0, dt=0.5, ptype='pulse', modes=None,
+    def __init__(self, data=None, t0=2.5, dt=0.5, ptype='pulse', modes=None,
                  amplitude=1.0, attack='exponential', release='instantaneous'):
         if data is None:
             self.d = Data()

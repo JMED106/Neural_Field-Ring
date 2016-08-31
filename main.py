@@ -12,7 +12,7 @@ from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, Theore
 __author__ = 'jm'
 
 
-def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', number=2E5, n=100, eta=4.0, delta=0.5):
+def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100, eta=4.0, delta=0.5):
     try:
         opts, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:",
                                    ["mode=", "amp=", "system=", "connec=", "neurons=", "lenght=", "extcurr=",
@@ -36,7 +36,7 @@ def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', number=2E5, n=100,
         elif opt in ("-c", "--connec"):
             cnt = arg
         elif opt in ("-N", "--neurons"):
-            number = int(arg)
+            neurons = int(float(arg))
         elif opt in ("-n", "--length"):
             n = int(arg)
         elif opt in ("-e", "--extcurr"):
@@ -44,7 +44,7 @@ def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', number=2E5, n=100,
         elif opt in ("-d", "--widthcurr"):
             delta = float(arg)
 
-    return pmode, ampl, system, cnt, number, n, eta, delta
+    return pmode, ampl, system, cnt, neurons, n, eta, delta
 
 
 selmode = 0
@@ -64,19 +64,31 @@ if __name__ == "__main__":
 # 0) PREPARE FOR CALCULATIONS
 # 0.1) Load data object:
 d = Data(l=sellength, N=selnumber, eta0=seleta, delta=seldelta, tfinal=20.0, system=selsystem)
+
 # 0.2) Create connectivity matrix and extract eigenmodes
-# c = Connectivity(d.l, data=d, profile='fs', fsmodes=[0, 15 / np.sqrt(0.5)])
 c = Connectivity(d.l, profile=selcnt, amplitude=10.0, data=d)
 print "Modes: ", c.modes
+# Check connectivity
+if not np.all(c.cnt == c.cnt_e + c.cnt_i):
+    print "Connectivity matrices are different!"
+
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
+# In case we have qif neurons and we are modeling the single ring model, check initial cond.
+if d.system != 'nf':
+    if not np.all(d.matrixE == d.matrixI):
+        d.matrixI = d.matrixE * 1.0
+
 # 0.4) Load Firing rate class in case qif network is simulated
 if d.system != 'nf':
     fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
+
 # 0.5) Set perturbation configuration
-p = Perturbation(data=d, dt=0.5, modes=[int(selmode)], amplitude=float(selamp), release='exponential')
+p = Perturbation(data=d, dt=0.5, modes=[int(selmode)], amplitude=float(selamp), attack='exponential')
+
 # 0.6) Define saving paths:
 s = SaveResults(data=d, cnt=c, pert=p, system=d.system)
+
 # 0.7) Other theoretical tools:
 th = TheoreticalComputations(d, c, p)
 
@@ -150,6 +162,10 @@ while temps < d.tfinal:
             fr.tspikes_i2 += d.matrixI[:, 2]
             fr.ravg2 += 1  # Counter for the "instantaneous" distribution
             fr.ravg += 1  # Counter for the "total time average" distribution
+
+        # Chech if both populations (ex. and inh.) are doing the same thing
+        if not np.all(d.matrixE == d.matrixI):
+            print "Symmetry breaking."
 
     # ######################## -  INTEGRATION  - ##
     # ######################## --   FR EQS.   -- ##

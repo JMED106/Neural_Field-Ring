@@ -342,8 +342,10 @@ class Connectivity:
         self.cnt_e = np.zeros((length, length))
         self.cnt_i = np.zeros((length, length))
         self.cnt = np.zeros((length, length))
-        [i_n, j_n] = 2.0 * np.pi * np.float64(np.meshgrid(xrange(length), xrange(length))) / length - np.pi
-        ij = np.abs(i_n - j_n)
+        # [i_n, j_n] = 2.0 * np.pi * np.float64(np.meshgrid(xrange(length), xrange(length))) / length - np.pi
+        # ij = np.abs(i_n - j_n)
+        [i_n, j_n] = np.meshgrid(xrange(length), xrange(length))
+        ij = (i_n - j_n) * (2.0 * np.pi / length)
         del i_n, j_n  # Make sure you delete these matrices here !!!
         self.profile = profile
         # Type of connectivity (profile=['mex-hat', 'General Fourier Series: fs'])
@@ -360,13 +362,12 @@ class Connectivity:
             self.cnt_e = self.vonmises(self.je, me, 0.0, mi, coords=ij)
             self.cnt_i = self.vonmises(0.0, me, self.ji, mi, coords=ij)
             self.cnt = self.vonmises(self.je, me, self.ji, mi, coords=ij)
-            # self.cnt = self.cnt_e + self.cnt_i
             # Compute eigenmodes
-            self.modes = self.jmodesdct(self.vonmises(self.je, me, self.ji, mi, length))
+            self.modes = self.vonmises_modes(self.je, me, self.ji, mi)
         elif profile == 'fs':
             # Generate fourier series with modes fsmodes
             if fsmodes is None:
-                fsmodes = [0, 6]  # Default values
+                fsmodes = 10.0 * np.array([0, 1, 0.8, -0.2])  # Default values
             self.cnt = self.jcntvty(fsmodes, coords=ij)
             # TODO: separate excitatory and inhibitory connectivity
             ma = (self.cnt > 0)
@@ -508,7 +509,15 @@ class Connectivity:
                 jk[i] *= np.sqrt(1.0 / (4.0 * l))
             else:
                 jk[i] *= np.sqrt(1.0 / (2.0 * l))
-        return jk[:nmodes:2]
+        return jk[0:2 * nmodes:2]
+
+    @staticmethod
+    def vonmises_modes(je, me, ji, mi, n=20):
+        """ Computes Fourier modes of a given connectivity profile, built using
+            Von Mises circular gaussian functions (see Marti, Rinzel, 2013)
+        """
+        modes = np.arange(n)
+        return je * special.iv(modes, me) / special.i0(me) - ji * special.iv(modes, mi) / special.i0(mi)
 
     @staticmethod
     def rtheory(j0, eta0, delta):
