@@ -84,17 +84,11 @@ class Data:
             self.N = N
             # Excitatory and inhibitory populations
             self.neni = 0.5
-            self.Ne = int(N * self.neni)
-            self.auxne = np.ones((1, self.Ne))
-            self.Ni = int(N - self.Ne)  # Number of inhibitory neurons
-            self.auxni = np.ones((1, self.Ni))
+
             # sub-populations
             self.dN = int(np.float(N) / np.float(l))
             if self.dN * l != N:
                 print('Warning: N, l not dividable')
-
-            self.dNe = int(self.dN * self.neni)  # Number of exc. neurons in each subpopulation
-            self.dNi = self.dN - self.dNe  # Number of inh. neurons in each subpopulation
 
             self.vpeak = 100.0  # Value of peak voltage (max voltage)
             # self.vreset = -self.vpeak  # Value of resetting voltage (min voltage)
@@ -121,41 +115,31 @@ class Data:
                 self.a_tau[i] = np.roll(a_tau0, i, 0)
 
             # Distributions of the external current       -- FOR l populations --
-            self.etaE = None
-            self.etaI = None
+            self.eta = None
             if fp == 'lorentz' or fp == 'gauss':
                 print "+ Setting distribution of external currents: "
-                self.etaE = np.zeros(self.Ne)
-                self.etaI = np.zeros(self.Ni)
+                self.eta = np.zeros(self.N)
                 if fp == 'lorentz':
                     print '   - Lorentzian distribution of external currents'
                     # Uniform distribution
-                    k = (2.0 * np.arange(1, self.dNe + 1) - self.dNe - 1.0) / (self.dNe + 1.0)
+                    k = (2.0 * np.arange(1, self.dN + 1) - self.dN - 1.0) / (self.dN + 1.0)
                     # Cauchy ppf (stats.cauchy.ppf can be used here)
                     eta_pop_e = eta0 + delta * np.tan((np.pi / 2.0) * k)
-
-                    k = (2.0 * np.arange(1, self.dNi + 1) - self.dNi - 1.0) / (self.dNi + 1.0)
-                    eta_pop_i = eta0 + delta * np.tan((np.pi / 2.0) * k)
                 else:
                     print '   - Gaussian distribution of external currents'
-                    k = (np.arange(1, self.dNe + 1)) / (self.dNe + 1.0)
+                    k = (np.arange(1, self.dN + 1)) / (self.dN + 1.0)
                     eta_pop_e = eta0 + delta * stats.norm.ppf(k)
-                    k = (np.arange(1, self.dNi + 1)) / (self.dNi + 1.0)
-                    eta_pop_i = eta0 + delta * stats.norm.ppf(k)
 
                 del k
                 for i in xrange(l):
-                    self.etaE[i * self.dNe:(i + 1) * self.dNe] = 1.0 * eta_pop_e
-                    self.etaI[i * self.dNi:(i + 1) * self.dNi] = 1.0 * eta_pop_i
-                del eta_pop_i, eta_pop_e
+                    self.eta[i * self.dN:(i + 1) * self.dN] = 1.0 * eta_pop_e
+                del eta_pop_e
             else:
                 print "+ Setting homogeneous population of neurons (identical), under GWN."
 
             # QIF neurons matrices (declaration)
-            self.matrixI = np.ones(shape=(self.Ni, 3)) * 0
-            self.matrixE = np.ones(shape=(self.Ne, 3)) * 0
-            self.spikes_i = np.ones(shape=(self.Ni, self.T_syn)) * 0  # Spike matrix (Ni x T_syn)
-            self.spikes_e = np.ones(shape=(self.Ne, self.T_syn)) * 0  # Spike matrix (Ne x T_syn)
+            self.matrix = np.ones(shape=(self.N, 3)) * 0
+            self.spikes = np.ones(shape=(self.N, self.T_syn)) * 0  # Spike matrix (Ne x T_syn)
 
             # Single neuron recording (not implemented)
             self.singlev = np.ones(self.nsteps) * 0.0
@@ -169,8 +153,7 @@ class Data:
             #                                  connectivity  matrix is created)
             self.spiketime = int(self.tau_peak / dt)
             self.s1time = self.T_syn + self.spiketime
-            self.spikes_e_mod = np.ones(shape=(self.Ne, self.spiketime)) * 0  # Spike matrix (Ne x (T_syn + tpeak/dt))
-            self.spikes_i_mod = np.ones(shape=(self.Ni, self.spiketime)) * 0  # Spike matrix (Ni x (T_syn + tpeak/dt))
+            self.spikes_mod = np.ones(shape=(self.N, self.spiketime)) * 0  # Spike matrix (Ne x (T_syn + tpeak/dt))
 
         # 0.9) Perturbation parameters
         self.PERT = False
@@ -215,10 +198,8 @@ class Data:
             self.fileprm = '%s_%.2lf-%.2lf-%.2lf-%d' % (self.fp, j0zero, self.eta0, self.delta, self.l)
             # We first try to load files that correspond to chosen parameters
             try:
-                self.spikes_e = np.load("%sic_qif_spikes_e_%s-%d.npy" % (self.filepath, self.fileprm, self.Ne))
-                self.spikes_i = np.load("%sic_qif_spikes_i_%s-%d.npy" % (self.filepath, self.fileprm, self.Ni))
-                self.matrixE = np.load("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm, self.Ne))
-                self.matrixI = np.load("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm, self.Ni))
+                self.spikes = np.load("%sic_qif_spikes_%s-%d.npy" % (self.filepath, self.fileprm, self.N))
+                self.matrix = np.load("%sic_qif_matrix_%s-%d.npy" % (self.filepath, self.fileprm, self.N))
                 print "Successfully loaded all data matrices."
             except IOError:
                 print "Files do not exist or cannot be read. Trying the most similar combination."
@@ -246,19 +227,16 @@ class Data:
                 # If the database has been successfully loaded we find the closest combination
                 # Note that the number of populations must coincide
                 if load is True and np.any(database[:, 0] == self.l) \
-                        and np.any(database[:, -2] == self.Ne) \
-                        and np.any(database[:, -1] == self.Ni):
+                        and np.any(database[:, -1] == self.N):
                     # mask combinations where population number match
-                    ma = ((database[:, 0] == self.l) & (database[:, -2] == self.Ne) & (database[:, -1] == self.Ni))
+                    ma = ((database[:, 0] == self.l) & (database[:, -1] == self.N))
                     # Find the closest combination by comparing with the theoretically obtained firing rate
                     idx = self.find_nearest(database[ma][:, -1], self.r0)
-                    (j02, eta, delta, ne, ni) = database[ma][idx, 1:]
+                    (j02, eta, delta, n) = database[ma][idx, 1:]
                     self.fileprm2 = '%s_%.2lf-%.2lf-%.2lf-%d' % (self.fp, j02, eta, delta, self.l)
                     try:
-                        self.spikes_e = np.load("%sic_qif_spikes_e_%s-%d.npy" % (self.filepath, self.fileprm2, ne))
-                        self.spikes_i = np.load("%sic_qif_spikes_i_%s-%d.npy" % (self.filepath, self.fileprm2, ni))
-                        self.matrixE = np.load("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm2, ne))
-                        self.matrixI = np.load("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm2, ni))
+                        self.spikes = np.load("%sic_qif_spikes_%s-%d.npy" % (self.filepath, self.fileprm2, n))
+                        self.matrix = np.load("%sic_qif_matrix_%s-%d.npy" % (self.filepath, self.fileprm2, n))
                         print "Successfully loaded all data matrices."
                     except IOError:
                         print "Files do not exist or cannot be read. This behavior wasn't expected ..."
@@ -270,17 +248,14 @@ class Data:
                     print "Loading random conditions. Generating new initial conditions. " \
                           "Run the program using the same conditions after the process finishes."
                     # We set excitatory and inhibitory neurons at the same initial conditions:
-                    self.matrixE[:, 0] = -0.1 * np.random.randn(self.Ne)
-                    self.matrixI[:, 0] = 1.0 * self.matrixE[:, 0]
+                    self.matrix[:, 0] = -0.1 * np.random.randn(self.N)
 
     def save_ic(self, temps):
         """ Function to save initial conditions """
-        np.save("%sic_qif_spikes_e_%s-%d" % (self.filepath, self.fileprm, self.Ne), self.spikes_e)
-        np.save("%sic_qif_spikes_i_%s-%d" % (self.filepath, self.fileprm, self.Ni), self.spikes_i)
-        self.matrixE[:, 1] = self.matrixE[:, 1] - (temps - self.dt)
-        np.save("%sic_qif_matrixE_%s-%d.npy" % (self.filepath, self.fileprm, self.Ne), self.matrixE)
-        self.matrixI[:, 1] = self.matrixI[:, 1] - (temps - self.dt)
-        np.save("%sic_qif_matrixI_%s-%d.npy" % (self.filepath, self.fileprm, self.Ni), self.matrixI)
+        np.save("%sic_qif_spikes_%s-%d" % (self.filepath, self.fileprm, self.N), self.spikes)
+        self.matrix[:, 1] = self.matrix[:, 1] - (temps - self.dt)
+        np.save("%sic_qif_matrix_%s-%d.npy" % (self.filepath, self.fileprm, self.N), self.matrix)
+
         # Introduce this combination into the database
         try:
             db = np.load("%sinitial_conditions.npy" % self.filepath)
@@ -290,10 +265,10 @@ class Data:
             db = False
         if db is False:
             np.save("%sinitial_conditions" % self.filepath,
-                    np.array([self.l, self.j0, self.eta0, self.delta, self.Ne, self.Ni]))
+                    np.array([self.l, self.j0, self.eta0, self.delta, self.N]))
         else:
             db.resize(np.array(np.shape(db)) + [1, 0], refcheck=False)
-            db[-1] = np.array([self.l, self.j0, self.eta0, self.delta, self.Ne, self.Ni])
+            db[-1] = np.array([self.l, self.j0, self.eta0, self.delta, self.N])
             np.save("%sinitial_conditions" % self.filepath, db)
 
     def register_ts(self, fr=None, th=None):
@@ -331,7 +306,7 @@ class Connectivity:
     def __init__(self, length=500, profile='mex-hat', amplitude=1.0, me=50, mi=5, j0=0.0,
                  refmode=None, refamp=None, fsmodes=None, data=None):
         """ In order to extract properties some parameters are needed: they can be
-            call separately.
+            called separately.
         """
 
         print "Creating connectivity matrix (depending on the size of the matrix (%d x %d) " \
@@ -339,8 +314,6 @@ class Connectivity:
         # Number of points (sample) of the function. It should be the number of populations in the ring.
         self.l = length
         # Connectivity function and spatial coordinates
-        self.cnt_e = np.zeros((length, length))
-        self.cnt_i = np.zeros((length, length))
         self.cnt = np.zeros((length, length))
         # [i_n, j_n] = 2.0 * np.pi * np.float64(np.meshgrid(xrange(length), xrange(length))) / length - np.pi
         # ij = np.abs(i_n - j_n)
@@ -359,8 +332,6 @@ class Connectivity:
                 self.ji = amplitude
                 self.me = me
                 self.mi = mi
-            self.cnt_e = self.vonmises(self.je, me, 0.0, mi, coords=ij)
-            self.cnt_i = self.vonmises(0.0, me, self.ji, mi, coords=ij)
             self.cnt = self.vonmises(self.je, me, self.ji, mi, coords=ij)
             # Compute eigenmodes
             self.modes = self.vonmises_modes(self.je, me, self.ji, mi)
@@ -370,9 +341,6 @@ class Connectivity:
                 fsmodes = 10.0 * np.array([0, 1, 0.8, -0.2])  # Default values
             self.cnt = self.jcntvty(fsmodes, coords=ij)
             # TODO: separate excitatory and inhibitory connectivity
-            ma = (self.cnt > 0)
-            self.cnt_e[ma] = self.cnt[ma]
-            self.cnt_i[~ma] = self.cnt[~ma]
             self.modes = fsmodes
         del ij
 
@@ -565,7 +533,7 @@ class FiringRate:
         self.tpoints_r = np.arange(0, self.d.tfinal, self.samplingtime)
 
         freemem = psutil.virtual_memory().available
-        needmem = 8 * (self.wsteps + self.d.l) * (data.Ne + data.Ni)
+        needmem = 8 * (self.wsteps + self.d.l) * data.N
         print "Approximately %d MB of memory will be allocated for FR measurement." % (needmem / (1024 ** 2))
         if (freemem - needmem) / (1024 ** 2) <= 0:
             print "MEMORY ERROR: not enough amount of memory available."
@@ -578,32 +546,25 @@ class FiringRate:
                 print "Terminating process."
                 exit(-1)
 
-        self.frspikes_e = 0 * np.zeros(shape=(data.Ne, self.wsteps))  # Secondary spikes matrix (for measuring)
-        self.frspikes_i = 0 * np.zeros(shape=(data.Ni, self.wsteps))
+        self.frspikes = 0 * np.zeros(shape=(data.N, self.wsteps))  # Secondary spikes matrix (for measuring)
         self.r = []  # Firing rate of the newtork(ring)
         self.rqif = []
         self.v = []  # Firing rate of the newtork(ring)
-        self.vavg_e = 0.0 * np.ones(data.Ne)
-        self.vavg_i = 0.0 * np.ones(data.Ni)
-        self.frqif_e = []  # Firing rate of individual qif neurons
-        self.frqif_i = []  # Firing rate of individual qif neurons
+        self.vavg0 = 0.0 * np.ones(data.N)
+        self.frqif0 = []  # Firing rate of individual qif neurons
         self.frqif = None
 
         # Total spikes of the network:
-        self.tspikes_e = 0 * np.ones(data.Ne)
-        self.tspikes_i = 0 * np.ones(data.Ni)
-        self.tspikes_e2 = 0 * np.ones(data.Ne)
-        self.tspikes_i2 = 0 * np.ones(data.Ni)
+        self.tspikes = 0 * np.ones(data.N)
+        self.tspikes2 = 0 * np.ones(data.N)
 
         # Theoretical distribution of firing rates
         self.thdist = dict()
 
         # Auxiliary matrixes
-        self.auxMatE = np.zeros((self.d.l, self.d.Ne))
-        self.auxMatI = np.zeros((self.d.l, self.d.Ni))
+        self.auxMat = np.zeros((self.d.l, self.d.N))
         for i in xrange(self.d.l):
-            self.auxMatE[i, i * self.d.dNe:(i + 1) * self.d.dNe] = 1.0
-            self.auxMatI[i, i * self.d.dNi:(i + 1) * self.d.dNi] = 1.0
+            self.auxMat[i, i * self.d.dN:(i + 1) * self.d.dN] = 1.0
 
         # Auxiliary counters
         self.ravg = 0
@@ -629,43 +590,33 @@ class FiringRate:
         if (tstep + 1) % self.sampling == 0 and (tstep * self.d.dt >= self.swindow):
             self.tfrstep += 1
             self.temps = tstep * self.d.dt
-            re = (1.0 / self.swindow) * (1.0 / self.d.dNe) * np.dot(self.auxMatE,
-                                                                    np.dot(self.frspikes_e, self.wones))
-            ri = (1.0 / self.swindow) * (1.0 / self.d.dNi) * np.dot(self.auxMatI,
-                                                                    np.dot(self.frspikes_i, self.wones))
+            re = (1.0 / self.swindow) * (1.0 / self.d.dNe) * np.dot(self.auxMat,
+                                                                    np.dot(self.frspikes, self.wones))
 
-            self.r.append((re + ri) / 2.0)
+            self.r.append(re)
             self.tempsfr.append(self.temps - self.swindow / 2.0)
             self.tempsfr2.append(self.temps)
 
             # Single neurons firing rate in a given time (averaging over a time window)
-            self.rqif.append(np.concatenate((self.tspikes_e2, self.tspikes_i2)))
+            self.rqif.append(self.tspikes2)
             self.rqif[-1] /= (self.ravg2 * self.d.dt * self.d.faketau)
             # We store total spikes for the "total time average" distribution of FR
-            self.tspikes_e += self.tspikes_e2
-            self.tspikes_i += self.tspikes_i2
+            self.tspikes += self.tspikes2
 
             # Reset vectors and counter
-            self.tspikes_e2 = 0.0 * np.ones(self.d.Ne)
-            self.tspikes_i2 = 0.0 * np.ones(self.d.Ni)
+            self.tspikes2 = 0.0 * np.ones(self.d.N)
             self.ravg2 = 0
 
             # Average of the voltages over a time window and over the populations
-            self.v.append(0.5 *
-                          ((1.0 / self.d.dNe) * np.dot(self.auxMatE, self.vavg_e / self.vavg) + (
-                              1.0 / self.d.dNi) * np.dot(
-                              self.auxMatI, self.vavg_i / self.vavg)))
+            self.v.append((1.0 / self.d.dN) * np.dot(self.auxMat, self.vavg0 / self.vavg))
             self.vavg = 0
-            self.vavg_e = 0.0 * np.ones(self.d.Ne)
-            self.vavg_i = 0.0 * np.ones(self.d.Ni)
+            self.vavg0 = 0.0 * np.ones(self.d.N)
 
     def singlefiringrate(self, tstep):
         """ Computes the firing rate of individual neurons.
-        :return: Nothing, results are stored at frqif_e and frqif_i
+        :return: Nothing, results are stored at frqif0 and frqif_i
         """
         if (tstep + 1) % self.sampqif == 0 and (tstep * self.d.dt >= self.swindow):
             # Firing rate measure in a time window
-            re = (1.0 / self.d.dt) * self.frspikes_e.mean(axis=1)
-            ri = (1.0 / self.d.dt) * self.frspikes_i.mean(axis=1)
-            self.frqif_e.append(re)
-            self.frqif_i.append(ri)
+            re = (1.0 / self.d.dt) * self.frspikes.mean(axis=1)
+            self.frqif0.append(re)

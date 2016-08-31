@@ -12,20 +12,20 @@ from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, Theore
 __author__ = 'jm'
 
 
-def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100, eta=4.0, delta=0.5):
+def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100, eta=4.0, delta=0.5, tfinal=20.0):
     try:
-        opts, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:",
+        opts, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:t:",
                                    ["mode=", "amp=", "system=", "connec=", "neurons=", "lenght=", "extcurr=",
-                                    "widthcurr="])
+                                    "widthcurr=", "tfinal="])
     except getopt.GetoptError:
         print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
-              '-n <lenght-of-ring-e <external-current> -d <widt-of-dist>]'
+              '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t>]'
         sys.exit(2)
 
     for opt, arg in opts:
         if opt == '-h':
             print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
-                  '-n <lenght-of-ring-e <external-current> -d <widt-of-dist>]'
+                  '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t>]'
             sys.exit()
         elif opt in ("-m", "--mode"):
             pmode = int(arg)
@@ -43,8 +43,10 @@ def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100
             eta = float(arg)
         elif opt in ("-d", "--widthcurr"):
             delta = float(arg)
+        elif opt in ("-t", "--tfinal"):
+            tfinal = float(arg)
 
-    return pmode, ampl, system, cnt, neurons, n, eta, delta
+    return pmode, ampl, system, cnt, neurons, n, eta, delta, tfinal
 
 
 selmode = 0
@@ -55,29 +57,25 @@ selnumber = 2E5
 sellength = 100
 seleta = 4.0
 seldelta = 0.5
+seltfinal = 20.0
 if __name__ == "__main__":
-    selmode, selamp, selsystem, selcnt, selnumber, sellength, seleta, seldelta = main(sys.argv[1:], selmode, selamp,
-                                                                                      selsystem, selcnt, selnumber,
-                                                                                      sellength, seleta, seldelta)
+    selmode, selamp, selsystem, selcnt, selnumber, sellength, seleta, seldelta, seltfinal = main(sys.argv[1:], selmode,
+                                                                                                 selamp,
+                                                                                                 selsystem, selcnt, selnumber,
+                                                                                                 sellength, seleta,
+                                                                                                 seldelta, seltfinal)
 
 ###################################################################################
 # 0) PREPARE FOR CALCULATIONS
 # 0.1) Load data object:
-d = Data(l=sellength, N=selnumber, eta0=seleta, delta=seldelta, tfinal=20.0, system=selsystem)
+d = Data(l=sellength, N=selnumber, eta0=seleta, delta=seldelta, tfinal=seltfinal, system=selsystem)
 
 # 0.2) Create connectivity matrix and extract eigenmodes
 c = Connectivity(d.l, profile=selcnt, amplitude=10.0, data=d)
 print "Modes: ", c.modes
-# Check connectivity
-if not np.all(c.cnt == c.cnt_e + c.cnt_i):
-    print "Connectivity matrices are different!"
 
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
-# In case we have qif neurons and we are modeling the single ring model, check initial cond.
-if d.system != 'nf':
-    if not np.all(d.matrixE == d.matrixI):
-        d.matrixI = d.matrixE * 1.0
 
 # 0.4) Load Firing rate class in case qif network is simulated
 if d.system != 'nf':
@@ -116,56 +114,36 @@ while temps < d.tfinal:
     # ######################## -      qif      - ##
     if d.system == 'qif' or d.system == 'both':
         # We compute the Mean-field vector s_j
-        se = (1.0 / d.Ne) * np.dot(c.cnt_e, np.dot(fr.auxMatE, np.dot(d.spikes_e, d.a_tau[:, tstep % d.T_syn])))
-        si = (1.0 / d.Ni) * np.dot(c.cnt_i, np.dot(fr.auxMatI, np.dot(d.spikes_i, d.a_tau[:, tstep % d.T_syn])))
+        s = (1.0 / d.N) * np.dot(c.cnt, np.dot(fr.auxMat, np.dot(d.spikes, d.a_tau[:, tstep % d.T_syn])))
 
         if d.fp == 'noise':
             noiseinput = np.sqrt(2.0 * d.dt / d.tau * d.delta) * noise(d.N)
             # Excitatory
-            d.matrixE = qifint_noise(d.matrixE, d.matrixE[:, 0], d.matrixE[:, 1], d.etaE, se + si + p.input,
-                                     noiseinput[0:d.Ne], temps, d.Ne,
-                                     d.dNe, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
-            # Inhibitory
-            d.matrixI = qifint_noise(d.matrixI, d.matrixI[:, 0], d.matrixI[:, 1], d.etaI, se + si + p.input,
-                                     noiseinput[d.Ne:], temps, d.Ni,
-                                     d.dNi, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
+            d.matrix = qifint_noise(d.matrix, d.matrix[:, 0], d.matrix[:, 1], d.eta, s + p.input,
+                                    noiseinput[0:d.N], temps, d.N,
+                                    d.dN, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
         else:
             # Excitatory
-            d.matrixE = qifint(d.matrixE, d.matrixE[:, 0], d.matrixE[:, 1], d.etaE, se + si + p.input, temps, d.Ne,
-                               d.dNe, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
-            # Inhibitory
-            d.matrixI = qifint(d.matrixI, d.matrixI[:, 0], d.matrixI[:, 1], d.etaI, se + si + p.input, temps, d.Ni,
-                               d.dNi, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
+            d.matrix = qifint(d.matrix, d.matrix[:, 0], d.matrix[:, 1], d.eta, s + p.input, temps, d.N,
+                              d.dN, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
 
         # Prepare spike matrices for Mean-Field computation and firing rate measure
         # Excitatory
-        d.spikes_e_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixE[:, 2]  # We store the spikes
-        d.spikes_e[:, tstep % d.T_syn] = 1 * d.spikes_e_mod[:, tstep % d.spiketime]
+        d.spikes_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrix[:, 2]  # We store the spikes
+        d.spikes[:, tstep % d.T_syn] = 1 * d.spikes_mod[:, tstep % d.spiketime]
         # Voltage measure:
-        vma_e = (d.matrixE[:, 1] <= temps)  # Neurons which are not in the refractory period
-        fr.vavg_e[vma_e] += d.matrixE[vma_e, 0]
-
-        # Inhibitory
-        d.spikes_i_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrixI[:, 2]  # We store the spikes
-        d.spikes_i[:, tstep % d.T_syn] = 1 * d.spikes_i_mod[:, tstep % d.spiketime]
-        vma_i = (d.matrixI[:, 1] <= temps)  # Neurons which are not in the refractory period
-        fr.vavg_i[vma_i] += d.matrixI[vma_i, 0]
+        vma = (d.matrix[:, 1] <= temps)  # Neurons which are not in the refractory period
+        fr.vavg0[vma] += d.matrix[vma, 0]
         fr.vavg += 1
 
         # ######################## -- FIRING RATE MEASURE -- ##
-        fr.frspikes_e[:, tstep % fr.wsteps] = 1 * d.spikes_e[:, tstep % d.T_syn]
-        fr.frspikes_i[:, tstep % fr.wsteps] = 1 * d.spikes_i[:, tstep % d.T_syn]
+        fr.frspikes[:, tstep % fr.wsteps] = 1 * d.spikes[:, tstep % d.T_syn]
         fr.firingrate(tstep)
         # Distribution of Firing Rates
         if tstep > 0:
-            fr.tspikes_e2 += d.matrixE[:, 2]
-            fr.tspikes_i2 += d.matrixI[:, 2]
+            fr.tspikes2 += d.matrix[:, 2]
             fr.ravg2 += 1  # Counter for the "instantaneous" distribution
             fr.ravg += 1  # Counter for the "total time average" distribution
-
-        # Chech if both populations (ex. and inh.) are doing the same thing
-        if not np.all(d.matrixE == d.matrixI):
-            print "Symmetry breaking."
 
     # ######################## -  INTEGRATION  - ##
     # ######################## --   FR EQS.   -- ##
@@ -208,9 +186,8 @@ th.thdist = th.theor_distrb(d.sphi[tstep % d.nsteps])
 # Register data to a dictionary
 if 'qif' in d.systems:
     # Distribution of firing rates over all time
-    fr.frqif_e = fr.tspikes_e / (fr.ravg * d.dt) / d.faketau
-    fr.frqif_i = fr.tspikes_i / (fr.ravg * d.dt) / d.faketau
-    fr.frqif = np.concatenate((fr.frqif_e, fr.frqif_i))
+    fr.frqif0 = fr.tspikes / (fr.ravg * d.dt) / d.faketau
+    fr.frqif = fr.frqif0 * 1.0
 
     if 'nf' in d.systems:
         d.register_ts(fr, th)
