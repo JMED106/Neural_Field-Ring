@@ -7,82 +7,52 @@ import numpy as np
 import progressbar as pb
 
 from nflib import Data, Connectivity, FiringRate
-from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, TheoreticalComputations
+from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, TheoreticalComputations, DictToObj
 
 __author__ = 'jm'
 
 
-def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100, eta=4.0, delta=0.5, tfinal=20.0,
-         fp='lorentz'):
+def main(argv, options):
     try:
-        opts, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:t:D:",
-                                   ["mode=", "amp=", "system=", "connec=", "neurons=", "lenght=", "extcurr=",
-                                    "widthcurr=", "tfinal=", "Distr="])
+        optis, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:t:D:",
+                                    ["mode=", "amp=", "system=", "connec=", "neurons=", "lenght=", "extcurr=",
+                                     "delta=", "tfinal=", "Distr="])
     except getopt.GetoptError:
         print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
               '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t> -D <type-of-distr>]'
         sys.exit(2)
 
-    for opt, arg in opts:
-        if opt == '-h':
-            print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
-                  '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t> -D <type-of-distr>]'
-            sys.exit()
-        elif opt in ("-m", "--mode"):
-            pmode = int(arg)
-        elif opt in ("-a", "--amp"):
-            ampl = float(arg)
-        elif opt in ("-s", "--system"):
-            system = arg
-        elif opt in ("-c", "--connec"):
-            cnt = arg
-        elif opt in ("-N", "--neurons"):
-            neurons = int(float(arg))
-        elif opt in ("-n", "--length"):
-            n = int(arg)
-        elif opt in ("-e", "--extcurr"):
-            eta = float(arg)
-        elif opt in ("-d", "--widthcurr"):
-            delta = float(arg)
-        elif opt in ("-t", "--tfinal"):
-            tfinal = float(arg)
-        elif opt in ("-D", "--Distr"):
-            fp = arg
+    for opt, arg in optis:
+        if len(opt) > 2:
+            opt = opt[1:3]
+        opt = opt[1]
+        # Check type and cast
+        if isinstance(options[opt], int):
+            options[opt] = int(float(arg))
+        elif isinstance(options[opt], float):
+            options[opt] = float(arg)
+        else:
+            options[opt] = arg
 
-    return pmode, ampl, system, cnt, neurons, n, eta, delta, tfinal, fp
+    return options
 
 
-options = {"selmode": 0, "selamp": 1.0, "selsystem": 'both', "selcnt": 'mex-hat',
-           "selnumber": 2E5, "sellength": 100, "seleta": 4.0, "seldelta": 0.5, "seltfinal": 20,
-           "selfp": 'lorentz'}
-selmode = 0
-selamp = 1.0
-selsystem = 'both'
-selcnt = 'mex-hat'
-selnumber = 2E5
-sellength = 100
-seleta = 4.0
-seldelta = 0.5
-seltfinal = 20.0
+opts = {"m": 0, "a": 1.0, "s": 'both', "c": 'mex-hat',
+        "N": 2E5, "n": 100, "e": 4.0, "d": 0.5, "t": 20,
+        "D": 'lorentz'}
+if __name__ == '__main__':
+    opts = main(sys.argv[1:], opts)
+print opts
+opts = DictToObj(opts)
 store_ic = False
-selfp = 'lorentz'
-if __name__ == "__main__":
-    selmode, selamp, selsystem, selcnt, selnumber, sellength, seleta, seldelta, seltfinal, selfp = main(sys.argv[1:],
-                                                                                                        selmode,
-                                                                                                        selamp,
-                                                                                                        selsystem, selcnt, selnumber,
-                                                                                                        sellength, seleta,
-                                                                                                        seldelta,
-                                                                                                        seltfinal,
-                                                                                                        selfp)
 
 ###################################################################################
 # 0) PREPARE FOR CALCULATIONS
 # 0.1) Load data object:
-d = Data(l=sellength, N=selnumber, eta0=seleta, delta=seldelta, tfinal=seltfinal, system=selsystem, fp=selfp)
+d = Data(l=opts.n, N=opts.N, eta0=opts.e, delta=opts.d, tfinal=opts.t, system=opts.s, fp=opts.D)
 
 # 0.2) Create connectivity matrix and extract eigenmodes
-c = Connectivity(d.l, profile=selcnt, amplitude=10.0, data=d)
+c = Connectivity(d.l, profile=opts.c, amplitude=10.0, data=d)
 print "Modes: ", c.modes
 
 # 0.3) Load initial conditions
@@ -96,7 +66,7 @@ if d.system != 'nf':
     fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
 
 # 0.5) Set perturbation configuration
-p = Perturbation(data=d, dt=0.5, modes=[int(selmode)], amplitude=float(selamp), attack='exponential')
+p = Perturbation(data=d, dt=0.5, modes=[int(opts.m)], amplitude=float(opts.a), attack='exponential')
 
 # 0.6) Define saving paths:
 sr = SaveResults(data=d, cnt=c, pert=p, system=d.system)
@@ -220,7 +190,7 @@ else:  # Save results
 # Preliminar plotting with gnuplot
 gp = Gnuplot.Gnuplot(persist=1)
 p1 = Gnuplot.PlotItems.Data(np.c_[d.tpoints * d.faketau, d.rphi[:, d.l / 2] / d.faketau], with_='lines')
-if selsystem != 'nf':
+if opts.s != 'nf':
     p2 = Gnuplot.PlotItems.Data(np.c_[np.array(fr.tempsfr) * d.faketau, np.array(fr.r)[:, d.l / 2] / d.faketau],
                                 with_='lines')
 else:
