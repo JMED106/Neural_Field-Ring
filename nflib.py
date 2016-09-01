@@ -221,7 +221,7 @@ class Data:
                         database.resize((1, np.size(database)))
                     load = True
                 except IOError:
-                    print "Iinitial conditions database not found (%sinitial_conditions)" % self.filepath
+                    print "Iinitial conditions database not found (%sinitial_conditions_%s)" % (self.filepath, self.fp)
                     print "Loading random conditions."
                     load = False
 
@@ -248,7 +248,7 @@ class Data:
                         print "Not appropriate format of initial conditions. Check the files for logical errors..."
                         exit(-1)
                 else:  # Create new initial conditions from scratch (loading random conditions)
-                    print "Loading random conditions. Generating new initial conditions. " \
+                    print "Generating new initial conditions. " \
                           "Run the program using the same conditions after the process finishes."
                     # We set excitatory and inhibitory neurons at the same initial conditions:
                     self.matrix[:, 0] = -0.1 * np.random.randn(self.N)

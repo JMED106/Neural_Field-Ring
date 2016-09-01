@@ -5,6 +5,7 @@ from timeit import default_timer as timer
 
 import numpy as np
 import progressbar as pb
+import yaml
 
 from nflib import Data, Connectivity, FiringRate
 from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, TheoreticalComputations, DictToObj
@@ -14,12 +15,13 @@ __author__ = 'jm'
 
 def main(argv, options):
     try:
-        optis, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:t:D:",
+        optis, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:t:D:f:",
                                     ["mode=", "amp=", "system=", "connec=", "neurons=", "lenght=", "extcurr=",
-                                     "delta=", "tfinal=", "Distr="])
+                                     "delta=", "tfinal=", "Distr=", "file="])
     except getopt.GetoptError:
-        print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
-              '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t> -D <type-of-distr>]'
+        print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> ' \
+              '-N <number-of-neurons> -n <lenght-of-ring-e <external-current> ' \
+              '-d <widt-of-dist> -t <final-t> -D <type-of-distr> -f <config-file>]'
         sys.exit(2)
 
     for opt, arg in optis:
@@ -38,13 +40,29 @@ def main(argv, options):
 
 
 opts = {"m": 0, "a": 1.0, "s": 'both', "c": 'mex-hat',
-        "N": 2E5, "n": 100, "e": 4.0, "d": 0.5, "t": 20,
-        "D": 'lorentz'}
+        "N": int(2E5), "n": 100, "e": 4.0, "d": 0.5, "t": 20,
+        "D": 'lorentz', "f": "conf.txt"}
+extopts = {"dt": 1E-3, "t0": 0.0, "ftau": 20.0E-3}
+pertopts = {"dt": 0.5, "attack": 'exponential', "release": 'instantaneous'}
+
 if __name__ == '__main__':
-    opts = main(sys.argv[1:], opts)
+    opts2 = main(sys.argv[1:], opts)
+else:
+    opts2 = opts
+try:
+    (opts, extopts, pertopts) = yaml.load(file(opts2['f']))
+    if __name__ == '__main__':
+        opts = main(sys.argv[1:], opts)
+except IOError:
+    print "The configuration file %s is missing, using inbuilt configuration." % (opts2['f'])
+except ValueError:
+    print "Configuration file has bad format."
+    exit(-1)
+
 print opts
 opts = DictToObj(opts)
-store_ic = False
+extopts = DictToObj(extopts)
+pertopts = DictToObj(pertopts)
 
 ###################################################################################
 # 0) PREPARE FOR CALCULATIONS
@@ -58,7 +76,8 @@ print "Modes: ", c.modes
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
 # Override initial conditions generator:
-if store_ic:
+if extopts.ic:
+    print "Overriding initial conditions."
     d.new_ic = True
 
 # 0.4) Load Firing rate class in case qif network is simulated
@@ -66,7 +85,7 @@ if d.system != 'nf':
     fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
 
 # 0.5) Set perturbation configuration
-p = Perturbation(data=d, dt=0.5, modes=[int(opts.m)], amplitude=float(opts.a), attack='exponential')
+p = Perturbation(data=d, dt=pertopts.dt, modes=[int(opts.m)], amplitude=float(opts.a), attack=pertopts.attack)
 
 # 0.6) Define saving paths:
 sr = SaveResults(data=d, cnt=c, pert=p, system=d.system)
@@ -103,8 +122,8 @@ while temps < d.tfinal:
         if d.fp == 'noise':
             noiseinput = np.sqrt(2.0 * d.dt / d.tau * d.delta) * noise(d.N)
             # Excitatory
-            d.matrix = qifint_noise(d.matrix, d.matrix[:, 0], d.matrix[:, 1], d.eta, s + p.input,
-                                    noiseinput[0:d.N], temps, d.N,
+            d.matrix = qifint_noise(d.matrix, d.matrix[:, 0], d.matrix[:, 1], d.eta0, s + p.input,
+                                    noiseinput, temps, d.N,
                                     d.dN, d.dt, d.tau, d.vpeak, d.refr_tau, d.tau_peak)
         else:
             # Excitatory
@@ -115,19 +134,23 @@ while temps < d.tfinal:
         # Excitatory
         d.spikes_mod[:, (tstep + d.spiketime - 1) % d.spiketime] = 1 * d.matrix[:, 2]  # We store the spikes
         d.spikes[:, tstep % d.T_syn] = 1 * d.spikes_mod[:, tstep % d.spiketime]
-        # Voltage measure:
-        vma = (d.matrix[:, 1] <= temps)  # Neurons which are not in the refractory period
-        fr.vavg0[vma] += d.matrix[vma, 0]
-        fr.vavg += 1
 
-        # ######################## -- FIRING RATE MEASURE -- ##
-        fr.frspikes[:, tstep % fr.wsteps] = 1 * d.spikes[:, tstep % d.T_syn]
-        fr.firingrate(tstep)
-        # Distribution of Firing Rates
-        if tstep > 0:
-            fr.tspikes2 += d.matrix[:, 2]
-            fr.ravg2 += 1  # Counter for the "instantaneous" distribution
-            fr.ravg += 1  # Counter for the "total time average" distribution
+        # If we are just obtaining the initial conditions (a steady state) we don't need to
+        # compute the firing rate.
+        if not d.new_ic:
+            # Voltage measure:
+            vma = (d.matrix[:, 1] <= temps)  # Neurons which are not in the refractory period
+            fr.vavg0[vma] += d.matrix[vma, 0]
+            fr.vavg += 1
+
+            # ######################## -- FIRING RATE MEASURE -- ##
+            fr.frspikes[:, tstep % fr.wsteps] = 1 * d.spikes[:, tstep % d.T_syn]
+            fr.firingrate(tstep)
+            # Distribution of Firing Rates
+            if tstep > 0:
+                fr.tspikes2 += d.matrix[:, 2]
+                fr.ravg2 += 1  # Counter for the "instantaneous" distribution
+                fr.ravg += 1  # Counter for the "total time average" distribution
 
     # ######################## -  INTEGRATION  - ##
     # ######################## --   FR EQS.   -- ##
@@ -167,6 +190,11 @@ tstep -= 1
 temps -= d.dt
 th.thdist = th.theor_distrb(d.sphi[tstep % d.nsteps])
 
+# Save initial conditions
+if d.new_ic:
+    d.save_ic(temps)
+    exit(0)
+
 # Register data to a dictionary
 if 'qif' in d.systems:
     # Distribution of firing rates over all time
@@ -179,13 +207,10 @@ if 'qif' in d.systems:
 else:
     d.register_ts(th=th)
 
-# Save initial conditions
-if d.new_ic:
-    d.save_ic(temps)
-else:  # Save results
-    sr.create_dict(phi0=[d.l / 2, d.l / 4, d.l / 20], t0=int(d.total_time / 10) * np.array([2, 4, 6, 8]))
-    sr.results['perturbation']['It'] = p.it
-    sr.save()
+# Save results
+sr.create_dict(phi0=[d.l / 2, d.l / 4, d.l / 20], t0=int(d.total_time / 10) * np.array([2, 4, 6, 8]))
+sr.results['perturbation']['It'] = p.it
+sr.save()
 
 # Preliminar plotting with gnuplot
 gp = Gnuplot.Gnuplot(persist=1)
