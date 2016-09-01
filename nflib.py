@@ -134,8 +134,11 @@ class Data:
                 for i in xrange(l):
                     self.eta[i * self.dN:(i + 1) * self.dN] = 1.0 * eta_pop_e
                 del eta_pop_e
-            else:
+            elif fp == 'noise':
                 print "+ Setting homogeneous population of neurons (identical), under GWN."
+            else:
+                print "This distribution is not implemented, yet."
+                exit(-1)
 
             # QIF neurons matrices (declaration)
             self.matrix = np.ones(shape=(self.N, 3)) * 0
@@ -213,7 +216,7 @@ class Data:
             if self.new_ic is True:
                 print "WARNING: New initial conditions will be created, wait until the simulation has finish."
                 try:
-                    database = np.load("%sinitial_conditions.npy" % self.filepath)
+                    database = np.load("%sinitial_conditions_%s.npy" % (self.filepath, self.fp))
                     if np.size(np.shape(database)) < 2:
                         database.resize((1, np.size(database)))
                     load = True
@@ -252,15 +255,16 @@ class Data:
 
     def save_ic(self, temps):
         """ Function to save initial conditions """
+        print "Saving configuration for initial conditions ..."
         np.save("%sic_qif_spikes_%s-%d" % (self.filepath, self.fileprm, self.N), self.spikes)
         self.matrix[:, 1] = self.matrix[:, 1] - (temps - self.dt)
         np.save("%sic_qif_matrix_%s-%d.npy" % (self.filepath, self.fileprm, self.N), self.matrix)
 
         # Introduce this combination into the database
         try:
-            db = np.load("%sinitial_conditions.npy" % self.filepath)
+            db = np.load("%sinitial_conditions_%s.npy" % (self.filepath, self.fp))
         except IOError:
-            print "Initial conditions database not found (%sinitial_conditions)" % self.filepath
+            print "Initial conditions database not found (%sinitial_conditions_%s.npy)" % (self.filepath, self.fp)
             print "Creating database ..."
             db = False
         if db is False:
@@ -282,7 +286,7 @@ class Data:
             self.v['qif'] = np.array(fr.v)
             self.t['qif'] = fr.tempsfr
             self.k['qif'] = None
-            self.dr['qif'] = dict(ex=fr.frqif_e, inh=fr.frqif_i, all=fr.frqif, inst=fr.rqif)
+            self.dr['qif'] = dict(all=fr.frqif0, inst=fr.rqif)
 
         if self.system == 'nf' or self.system == 'both':
             self.r['nf'] = self.rphi
@@ -590,8 +594,8 @@ class FiringRate:
         if (tstep + 1) % self.sampling == 0 and (tstep * self.d.dt >= self.swindow):
             self.tfrstep += 1
             self.temps = tstep * self.d.dt
-            re = (1.0 / self.swindow) * (1.0 / self.d.dNe) * np.dot(self.auxMat,
-                                                                    np.dot(self.frspikes, self.wones))
+            re = (1.0 / self.swindow) * (1.0 / self.d.dN) * np.dot(self.auxMat,
+                                                                   np.dot(self.frspikes, self.wones))
 
             self.r.append(re)
             self.tempsfr.append(self.temps - self.swindow / 2.0)

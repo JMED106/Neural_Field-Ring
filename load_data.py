@@ -1,6 +1,7 @@
 import getopt
 import sys
 
+import matplotlib.pyplot as plt
 import numpy as np
 
 from tools import DictToObj
@@ -14,6 +15,7 @@ __author__ = 'Jose M. Esnaola Acebes'
 """
 
 pi = np.pi
+cplot = plt.pcolormesh
 
 
 def __init__(argv):
@@ -27,8 +29,8 @@ def __init__(argv):
             print 'load_data.py [-f <file>]'
             sys.exit()
         elif opt in ("-f", "--file"):
-            fin = arg
-            return fin
+            filein = arg
+            return filein
         else:
             print 'load_data.py [-f <file>]'
             sys.exit()

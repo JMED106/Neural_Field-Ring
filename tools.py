@@ -199,7 +199,7 @@ class SaveResults:
 
         if system == 'qif' or system == 'both':
             self.results['qif'] = dict(fr=dict(), v=dict())
-            self.results['parameters']['qif'] = {'N': self.d.N, 'Ne': self.d.Ne, 'Ni': self.d.Ni}
+            self.results['parameters']['qif'] = {'N': self.d.N}
         if system == 'nf' or system == 'both':
             self.results['nf'] = dict(fr=dict(), v=dict())
 

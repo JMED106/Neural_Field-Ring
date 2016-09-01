@@ -12,20 +12,21 @@ from tools import Perturbation, qifint, qifint_noise, noise, SaveResults, Theore
 __author__ = 'jm'
 
 
-def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100, eta=4.0, delta=0.5, tfinal=20.0):
+def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100, eta=4.0, delta=0.5, tfinal=20.0,
+         fp='lorentz'):
     try:
-        opts, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:t:",
+        opts, args = getopt.getopt(argv, "hm:a:s:c:N:n:e:d:t:D:",
                                    ["mode=", "amp=", "system=", "connec=", "neurons=", "lenght=", "extcurr=",
-                                    "widthcurr=", "tfinal="])
+                                    "widthcurr=", "tfinal=", "Distr="])
     except getopt.GetoptError:
         print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
-              '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t>]'
+              '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t> -D <type-of-distr>]'
         sys.exit(2)
 
     for opt, arg in opts:
         if opt == '-h':
             print 'main.py [-m <mode> -a <amplitude> -s <system> -c <connectivity> -N <number-of-neurons> ' \
-                  '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t>]'
+                  '-n <lenght-of-ring-e <external-current> -d <widt-of-dist> -t <final-t> -D <type-of-distr>]'
             sys.exit()
         elif opt in ("-m", "--mode"):
             pmode = int(arg)
@@ -45,10 +46,15 @@ def main(argv, pmode=1, ampl=1.0, system='nf', cnt='mex-hat', neurons=2E5, n=100
             delta = float(arg)
         elif opt in ("-t", "--tfinal"):
             tfinal = float(arg)
+        elif opt in ("-D", "--Distr"):
+            fp = arg
 
-    return pmode, ampl, system, cnt, neurons, n, eta, delta, tfinal
+    return pmode, ampl, system, cnt, neurons, n, eta, delta, tfinal, fp
 
 
+options = {"selmode": 0, "selamp": 1.0, "selsystem": 'both', "selcnt": 'mex-hat',
+           "selnumber": 2E5, "sellength": 100, "seleta": 4.0, "seldelta": 0.5, "seltfinal": 20,
+           "selfp": 'lorentz'}
 selmode = 0
 selamp = 1.0
 selsystem = 'both'
@@ -58,17 +64,22 @@ sellength = 100
 seleta = 4.0
 seldelta = 0.5
 seltfinal = 20.0
+store_ic = False
+selfp = 'lorentz'
 if __name__ == "__main__":
-    selmode, selamp, selsystem, selcnt, selnumber, sellength, seleta, seldelta, seltfinal = main(sys.argv[1:], selmode,
-                                                                                                 selamp,
-                                                                                                 selsystem, selcnt, selnumber,
-                                                                                                 sellength, seleta,
-                                                                                                 seldelta, seltfinal)
+    selmode, selamp, selsystem, selcnt, selnumber, sellength, seleta, seldelta, seltfinal, selfp = main(sys.argv[1:],
+                                                                                                        selmode,
+                                                                                                        selamp,
+                                                                                                        selsystem, selcnt, selnumber,
+                                                                                                        sellength, seleta,
+                                                                                                        seldelta,
+                                                                                                        seltfinal,
+                                                                                                        selfp)
 
 ###################################################################################
 # 0) PREPARE FOR CALCULATIONS
 # 0.1) Load data object:
-d = Data(l=sellength, N=selnumber, eta0=seleta, delta=seldelta, tfinal=seltfinal, system=selsystem)
+d = Data(l=sellength, N=selnumber, eta0=seleta, delta=seldelta, tfinal=seltfinal, system=selsystem, fp=selfp)
 
 # 0.2) Create connectivity matrix and extract eigenmodes
 c = Connectivity(d.l, profile=selcnt, amplitude=10.0, data=d)
@@ -76,6 +87,9 @@ print "Modes: ", c.modes
 
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
+# Override initial conditions generator:
+if store_ic:
+    d.new_ic = True
 
 # 0.4) Load Firing rate class in case qif network is simulated
 if d.system != 'nf':
@@ -85,7 +99,7 @@ if d.system != 'nf':
 p = Perturbation(data=d, dt=0.5, modes=[int(selmode)], amplitude=float(selamp), attack='exponential')
 
 # 0.6) Define saving paths:
-s = SaveResults(data=d, cnt=c, pert=p, system=d.system)
+sr = SaveResults(data=d, cnt=c, pert=p, system=d.system)
 
 # 0.7) Other theoretical tools:
 th = TheoreticalComputations(d, c, p)
@@ -187,7 +201,6 @@ th.thdist = th.theor_distrb(d.sphi[tstep % d.nsteps])
 if 'qif' in d.systems:
     # Distribution of firing rates over all time
     fr.frqif0 = fr.tspikes / (fr.ravg * d.dt) / d.faketau
-    fr.frqif = fr.frqif0 * 1.0
 
     if 'nf' in d.systems:
         d.register_ts(fr, th)
@@ -200,9 +213,9 @@ else:
 if d.new_ic:
     d.save_ic(temps)
 else:  # Save results
-    s.create_dict(phi0=[d.l / 2, d.l / 4, d.l / 20], t0=int(d.total_time / 10) * np.array([2, 4, 6, 8]))
-    s.results['perturbation']['It'] = p.it
-    s.save()
+    sr.create_dict(phi0=[d.l / 2, d.l / 4, d.l / 20], t0=int(d.total_time / 10) * np.array([2, 4, 6, 8]))
+    sr.results['perturbation']['It'] = p.it
+    sr.save()
 
 # Preliminar plotting with gnuplot
 gp = Gnuplot.Gnuplot(persist=1)
