@@ -157,6 +157,10 @@ class Data:
             self.spiketime = int(self.tau_peak / dt)
             self.s1time = self.T_syn + self.spiketime
             self.spikes_mod = np.ones(shape=(self.N, self.spiketime)) * 0  # Spike matrix (Ne x (T_syn + tpeak/dt))
+            # Auxiliary matrix
+            self.auxMat = np.zeros((self.l, self.N))
+            for i in xrange(self.l):
+                self.auxMat[i, i * self.dN:(i + 1) * self.dN] = 1.0
 
         # 0.9) Perturbation parameters
         self.PERT = False
@@ -211,7 +215,7 @@ class Data:
                 print "Not appropriate format of initial conditions. Check the files for logical errors..."
                 exit(-1)
 
-            # If the loading fails or new_ic is override we look for the closest combination in the data base
+            # If the loading fails or new_ic is overridden we look for the closest combination in the data base
             database = None
             if self.new_ic is True:
                 print "WARNING: New initial conditions will be created, wait until the simulation has finish."
@@ -268,12 +272,12 @@ class Data:
             print "Creating database ..."
             db = False
         if db is False:
-            np.save("%sinitial_conditions" % self.filepath,
+            np.save("%sinitial_conditions_%s" % (self.filepath, self.fp),
                     np.array([self.l, self.j0, self.eta0, self.delta, self.N]))
         else:
             db.resize(np.array(np.shape(db)) + [1, 0], refcheck=False)
             db[-1] = np.array([self.l, self.j0, self.eta0, self.delta, self.N])
-            np.save("%sinitial_conditions" % self.filepath, db)
+            np.save("%sinitial_conditions_%s" % (self.filepath, self.fp), db)
 
     def register_ts(self, fr=None, th=None):
         """ Function that stores time series of the firing rate, mean membrane potential, etc.
@@ -342,7 +346,7 @@ class Connectivity:
         elif profile == 'fs':
             # Generate fourier series with modes fsmodes
             if fsmodes is None:
-                fsmodes = 10.0 * np.array([0, 1, 0.8, -0.2])  # Default values
+                fsmodes = 10.0 * np.array([0, 1, 0.75, -0.25])  # Default values
             self.cnt = self.jcntvty(fsmodes, coords=ij)
             # TODO: separate excitatory and inhibitory connectivity
             self.modes = fsmodes
@@ -565,11 +569,6 @@ class FiringRate:
         # Theoretical distribution of firing rates
         self.thdist = dict()
 
-        # Auxiliary matrixes
-        self.auxMat = np.zeros((self.d.l, self.d.N))
-        for i in xrange(self.d.l):
-            self.auxMat[i, i * self.d.dN:(i + 1) * self.d.dN] = 1.0
-
         # Auxiliary counters
         self.ravg = 0
         self.ravg2 = 0
@@ -594,7 +593,7 @@ class FiringRate:
         if (tstep + 1) % self.sampling == 0 and (tstep * self.d.dt >= self.swindow):
             self.tfrstep += 1
             self.temps = tstep * self.d.dt
-            re = (1.0 / self.swindow) * (1.0 / self.d.dN) * np.dot(self.auxMat,
+            re = (1.0 / self.swindow) * (1.0 / self.d.dN) * np.dot(self.d.auxMat,
                                                                    np.dot(self.frspikes, self.wones))
 
             self.r.append(re)
@@ -612,7 +611,7 @@ class FiringRate:
             self.ravg2 = 0
 
             # Average of the voltages over a time window and over the populations
-            self.v.append((1.0 / self.d.dN) * np.dot(self.auxMat, self.vavg0 / self.vavg))
+            self.v.append((1.0 / self.d.dN) * np.dot(self.d.auxMat, self.vavg0 / self.vavg))
             self.vavg = 0
             self.vavg0 = 0.0 * np.ones(self.d.N)
 

@@ -36,6 +36,8 @@
   t0: 0.0
 # Time constant (to be applied after computations are done, faketau)
   ftau: 20.0E-3
+# Modes of connectivity
+  modes: [0, 10, 7.5, -2.5]
 
 # Extra options for perturbation
 # ¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯¯

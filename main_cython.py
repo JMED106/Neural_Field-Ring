@@ -77,12 +77,16 @@ print "Modes: ", c.modes
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
 # Override initial conditions generator:
+if opts.a != 0.0:
+    extopts.ic = False
+else:
+    extopts.ic = True
 if extopts.ic:
     print "Overriding initial conditions."
     d.new_ic = True
 
 # 0.4) Load Firing rate class in case qif network is simulated
-if d.system != 'nf':
+if d.system != 'nf' and not d.new_ic:
     fr = FiringRate(data=d, swindow=0.5, sampling=0.05)
 
 # 0.5) Set perturbation configuration
@@ -122,7 +126,7 @@ while temps < d.tfinal:
     # ######################## -      qif      - ##
     if d.system == 'qif' or d.system == 'both':
         # We compute the Mean-field vector s_j
-        s = (1.0 / d.N) * np.dot(c.cnt, np.dot(fr.auxMat, np.dot(d.spikes, d.a_tau[:, tstep % d.T_syn])))
+        s = (1.0 / d.N) * np.dot(c.cnt, np.dot(d.auxMat, np.dot(d.spikes, d.a_tau[:, tstep % d.T_syn])))
 
         if d.fp == 'noise':
             noiseinput = np.sqrt(2.0 * d.dt / d.tau * d.delta) * noise(d.N)

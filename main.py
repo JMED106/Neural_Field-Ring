@@ -42,7 +42,7 @@ def main(argv, options):
 opts = {"m": 0, "a": 1.0, "s": 'both', "c": 'mex-hat',
         "N": int(2E5), "n": 100, "e": 4.0, "d": 0.5, "t": 20,
         "D": 'lorentz', "f": "conf.txt"}
-extopts = {"dt": 1E-3, "t0": 0.0, "ftau": 20.0E-3}
+extopts = {"dt": 1E-3, "t0": 0.0, "ftau": 20.0E-3, "modes": [10, 7.5, -2.5]}
 pertopts = {"dt": 0.5, "attack": 'exponential', "release": 'instantaneous'}
 
 if __name__ == '__main__':
@@ -70,12 +70,16 @@ pertopts = DictToObj(pertopts)
 d = Data(l=opts.n, N=opts.N, eta0=opts.e, delta=opts.d, tfinal=opts.t, system=opts.s, fp=opts.D)
 
 # 0.2) Create connectivity matrix and extract eigenmodes
-c = Connectivity(d.l, profile=opts.c, amplitude=10.0, data=d)
+c = Connectivity(d.l, profile=opts.c, fsmodes=extopts.modes, amplitude=10.0, data=d)
 print "Modes: ", c.modes
 
 # 0.3) Load initial conditions
 d.load_ic(c.modes[0], system=d.system)
 # Override initial conditions generator:
+if opts.a != 0.0:
+    extopts.ic = False
+else:
+    extopts.ic = True
 if extopts.ic:
     print "Overriding initial conditions."
     d.new_ic = True
@@ -117,7 +121,7 @@ while temps < d.tfinal:
     # ######################## -      qif      - ##
     if d.system == 'qif' or d.system == 'both':
         # We compute the Mean-field vector s_j
-        s = (1.0 / d.N) * np.dot(c.cnt, np.dot(fr.auxMat, np.dot(d.spikes, d.a_tau[:, tstep % d.T_syn])))
+        s = (1.0 / d.N) * np.dot(c.cnt, np.dot(d.auxMat, np.dot(d.spikes, d.a_tau[:, tstep % d.T_syn])))
 
         if d.fp == 'noise':
             noiseinput = np.sqrt(2.0 * d.dt / d.tau * d.delta) * noise(d.N)
