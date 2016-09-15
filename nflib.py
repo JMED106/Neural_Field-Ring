@@ -218,7 +218,7 @@ class Data:
             # If the loading fails or new_ic is overridden we look for the closest combination in the data base
             database = None
             if self.new_ic is True:
-                print "WARNING: New initial conditions will be created, wait until the simulation has finish."
+                print "WARNING: New initial conditions will be created, wait until the simulation has finished."
                 try:
                     database = np.load("%sinitial_conditions_%s.npy" % (self.filepath, self.fp))
                     if np.size(np.shape(database)) < 2:

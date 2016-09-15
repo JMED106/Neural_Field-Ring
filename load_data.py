@@ -41,3 +41,10 @@ d = np.load(fin)
 data = DictToObj(d.item())
 phi = np.linspace(-pi, pi, data.parameters.l)
 phip = np.linspace(-pi, pi, data.parameters.l + 1)
+
+# We store the time series in a different file (for easier management)
+# Comment lines to disable :b
+ts_r = np.array(data.qif.fr.ring) / data.parameters.tau
+ts_t = np.array(data.qif.t) * data.parameters.tau
+np.save("ts_r.npy", ts_r)
+np.save("ts_t.npy", ts_t)
