@@ -60,6 +60,9 @@ except ValueError:
     exit(-1)
 
 print opts
+# Gather all parameters in a single dictionary (for saving)
+parameters = {'opts': opts, 'extopts': extopts, 'pertopts': pertopts}
+# Convert them to dictionaries for easier access
 opts = DictToObj(opts)
 extopts = DictToObj(extopts)
 pertopts = DictToObj(pertopts)
@@ -92,7 +95,7 @@ if d.system != 'nf':
 p = Perturbation(data=d, dt=pertopts.dt, modes=[int(opts.m)], amplitude=float(opts.a), attack=pertopts.attack)
 
 # 0.6) Define saving paths:
-sr = SaveResults(data=d, cnt=c, pert=p, system=d.system)
+sr = SaveResults(data=d, cnt=c, pert=p, system=d.system, parameters=parameters)
 
 # 0.7) Other theoretical tools:
 th = TheoreticalComputations(d, c, p)

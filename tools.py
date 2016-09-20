@@ -10,7 +10,11 @@ __author__ = 'Jose M. Esnaola Acebes'
 
 """ Library containing different tools to use alongside the main simulation:
 
-    + Perturbation class
+    + Perturbation class: creates a perturbation profile and timing.
+    + Saving Class: contains a method to create a dictionary with the data and a method to save it.
+    + Theoretical computation class: some computations based on theory.
+    + A class that transforms a python dictionary into a python object (for easier usage).
+
 """
 
 
@@ -105,6 +109,7 @@ class Perturbation:
         self.attack = attack
         self.taur = 0.2
         self.trmod = 0.01
+        self.trmod0 = 1.0 * self.trmod
         # Decay (release) and parameters
         self.release = release
         self.taud = 0.2
@@ -146,7 +151,7 @@ class Perturbation:
                 if self.attack == 'exponential' and self.trmod < 1.0:
                     self.trmod += (self.d.dt / self.taur) * self.trmod
                     self.tdmod = self.trmod
-                    self.input = self.trmod * self.smod
+                    self.input = (self.trmod - self.trmod0) * self.smod
                 elif self.attack == 'instantaneous':
                     if temps == self.t0:
                         self.input = self.amp
@@ -158,14 +163,7 @@ class SaveResults:
     """ Save Firing rate data to be plotted or to be loaded with numpy.
     """
 
-    # TODO: potentials of single neurons ?
-    # TODO: distribution of potentials (QIF)
-    # TODO: Kuramoto order parameter
-    # TODO: power spectrum
-    # TODO: frequency plot (FFT), periodogram
-    # TODO: Linear response (frequency resonance)
-
-    def __init__(self, data=None, cnt=None, pert=None, path='results', system='nf'):
+    def __init__(self, data=None, cnt=None, pert=None, path='results', system='nf', parameters=None):
         if data is None:
             self.d = Data()
         else:
@@ -187,8 +185,9 @@ class SaveResults:
         # Define file paths depending on the system (nf, qif, both)
         self.fn = SaveResults.FileName(self.d, system)
         self.results = dict(parameters=dict(), connectivity=dict)
+        # Parameters are store copying the configuration dictionary and other useful parameters (from the beginning)
         self.results['parameters'] = {'l': self.d.l, 'eta0': self.d.eta0, 'delta': self.d.delta, 'j0': self.d.j0,
-                                      'tau': self.d.faketau}
+                                      'tau': self.d.faketau, 'opts': parameters}
         self.results['connectivity'] = {'type': cnt.profile, 'cnt': cnt.cnt, 'modes': cnt.modes, 'freqs': cnt.freqs}
         self.results['perturbation'] = {'t0': pert.t0}
         if cnt.profile == 'mex-hat':
